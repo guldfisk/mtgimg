@@ -64,13 +64,14 @@ class ImageRequest(object):
 			self.name + '.' + self.extension,
 		)
 	@LazyProperty
-	def uri(self) -> str:
-		return 'https://img.scryfall.com/cards/{}/en/{}/{}.{}'.format(
-			'art_crop' if self._crop else 'png',
-			self._printing.expansion.code.lower(),
-			self._name_no_extension(),
-			self.extension
-		)
+	def remote_card_uri(self) -> str:
+		return 'https://api.scryfall.com/cards/multiverse/{}'.format(self.printing.id)
+	@property
+	def printing(self):
+		return self._printing
+	@property
+	def back(self):
+		return self._back
 	def __hash__(self):
 		return hash((
 			self._printing,
@@ -112,16 +113,21 @@ class Fetcher(threading.Thread):
 		self.size = size
 	@staticmethod
 	def _fetch(image_request: ImageRequest, size: t.Tuple[int, int]):
-		print('fetching', image_request, image_request.uri)
-		ro = r.get(
-			image_request.uri,
+		remote_card_response = r.get(image_request.remote_card_uri)
+		if not remote_card_response.ok:
+			return
+		remote_card = remote_card_response.json()
+		image_response = r.get(
+			remote_card['card_faces'][-1 if image_request.back else 0]['image_uris']['png']
+			if image_request.printing.cardboard.layout == Layout.TRANSFORM else
+			remote_card['image_uris']['png'],
 			stream=True,
 		)
 		temp_path = os.path.join(image_request.dir_path, 'temp')
-		if not ro.ok:
+		if not image_response.ok:
 			return
 		with open(temp_path, 'wb') as f:
-			for chunk in ro.iter_content(1024):
+			for chunk in image_response.iter_content(1024):
 				f.write(chunk)
 		fetched_image = Image.open(temp_path)
 		fetched_image.load()
@@ -158,9 +164,8 @@ class Fetcher(threading.Thread):
 
 class Cropper(threading.Thread):
 	cropping = SingleAccessDict()
-	def __init__(self, image_request: ImageRequest, callback: t.Callable = None, size: t.Tuple[int, int] = (0, 0)):
+	def __init__(self, image_request: ImageRequest, callback: t.Callable = None, size: t.Tuple[int, int] = (560, 435)):
 		super().__init__()
-		print(image_request)
 		self.image_request = image_request
 		self.image_request._crop = True
 		self.callback = callback
@@ -168,13 +173,13 @@ class Cropper(threading.Thread):
 	@staticmethod
 	def cropped_image(image_request: ImageRequest):
 		img = Loader.get_image(
-			printing = image_request._printing,
-			back = image_request._back,
+			printing = image_request.printing,
+			back = image_request.back,
 			async = False,
 		)
 		return Cropper._cropped_image(
 			image = img,
-			layout = image_request._printing.cardboard.layout,
+			layout = image_request.printing.cardboard.layout,
 		)
 	@staticmethod
 	def _cropped_image(image: Image.Image, layout: Layout):
@@ -186,7 +191,6 @@ class Cropper(threading.Thread):
 			return image.crop(
 				(92, 120, 652, 555)
 			)
-
 	@staticmethod
 	def _crop(image_request: ImageRequest):
 		uncropped_request = copy.copy(image_request)
@@ -255,16 +259,16 @@ def test():
 	from mtgorp.db import create, load
 	db = load.Loader.load()
 	# printing = db.cardboards['Fire // Ice'].printings.__iter__().__next__()
-	cardboard = db.cardboards['Delver of Secrets // Insectile Aberration']
+	cardboard = db.cardboards['Bull Elephant']
 	# printing = db.printings[(db.expansions['CMD'], '198')]
 	printing = cardboard.printings.__iter__().__next__()
 	print(printing)
 
 	def t(q, r):
-		print('callback', q._printing, r)
+		print('callback', q.printing, r)
 
-	Loader.get_image(printing, crop = True, callback=t, back=True)
-	Loader.get_image(printing, crop = True, callback=t)
+	Loader.get_image(printing, crop = True, async = False)
+	# Loader.get_image(printing, crop = True, callback=t)
 
 if __name__ == '__main__':
 	test()

@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-	name='orp',
+	name='mtgimg',
 	version='1.0',
 	packages=['mtgimg'],
 	dependency_links=[
