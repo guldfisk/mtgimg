@@ -2,16 +2,18 @@ import threading
 import os
 import typing as t
 import requests as r
-import copy
+import tempfile
 
-from functools import lru_cache
 from PIL import Image
 
+from promise import Promise
 from appdirs import AppDirs
 from lazy_property import LazyProperty
 
 from mtgorp.models.persistent.printing import Printing
 from mtgorp.models.persistent.attributes.layout import Layout
+
+from mtgimg.async import Resolver
 
 APP_DATA_PATH = AppDirs('mtgimg', 'mtgimg').user_data_dir
 IMAGES_PATH = os.path.join(APP_DATA_PATH, 'images')
@@ -43,7 +45,7 @@ class ImageRequest(object):
 		if len(tuple(self._printing.cardboard.cards))>1:
 			return str(self._printing.collector_number) + 'a'
 		return str(self._printing.collector_number)
-	@LazyProperty
+	@property
 	def name(self) -> str:
 		return self._name_no_extension() + ('_crop' if self._crop else '')
 	@property
@@ -72,6 +74,11 @@ class ImageRequest(object):
 	@property
 	def back(self):
 		return self._back
+	@property
+	def crop(self):
+		return self._crop
+	def cropped_as(self, crop: bool):
+		return self.__class__(self._printing, self._back, crop)
 	def __hash__(self):
 		return hash((
 			self._printing,
@@ -79,110 +86,119 @@ class ImageRequest(object):
 			self._crop,
 		))
 	def __eq__(self, other):
-		return isinstance(other, self.__class__)\
-			and self._printing == other._printing\
-			and self._back == other._back\
+		return (
+			isinstance(other, self.__class__)
+			and self._printing == other._printing
+			and self._back == other._back
 			and self._crop == other._crop
+		)
+	def __repr__(self):
+		return '{}({}, {}, {})'.format(
+			self.__class__.__name__,
+			self._printing,
+			self._back,
+			self._crop,
+		)
+
 
 class SingleAccessDict(dict):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.lock = threading.Lock()
+		self._lock = threading.Lock()
 	def __getitem__(self, item):
-		with self.lock:
-			v = super().__getitem__(item)
-		return v
+		with self._lock:
+			return super().__getitem__(item)
 	def __setitem__(self, key, value):
-		with self.lock:
+		with self._lock:
 			super().__setitem__(key, value)
 	def __delitem__(self, key):
-		with self.lock:
+		with self._lock:
 			super().__delitem__(key)
+	def get(self, key, default = None):
+		with self._lock:
+			return super().get(key, default)
 
-class Fetcher(threading.Thread):
-	fetching = SingleAccessDict()
+class ImageFetchException(Exception):
+	pass
+
+class Fetcher(Resolver):
+	_fetching = SingleAccessDict()
+
 	def __init__(
 		self,
 		image_request: ImageRequest,
-		callback: t.Callable = None,
 		size: t.Tuple[int, int] = (745, 1040)
 	):
 		super().__init__()
-		self.image_request = image_request
-		self.callback = callback
-		self.size = size
-	@staticmethod
-	def _fetch(image_request: ImageRequest, size: t.Tuple[int, int]):
-		remote_card_response = r.get(image_request.remote_card_uri)
-		if not remote_card_response.ok:
-			return
-		remote_card = remote_card_response.json()
-		image_response = r.get(
-			remote_card['card_faces'][-1 if image_request.back else 0]['image_uris']['png']
-			if image_request.printing.cardboard.layout == Layout.TRANSFORM else
-			remote_card['image_uris']['png'],
-			stream=True,
-		)
-		temp_path = os.path.join(image_request.dir_path, 'temp')
-		if not image_response.ok:
-			return
-		with open(temp_path, 'wb') as f:
-			for chunk in image_response.iter_content(1024):
-				f.write(chunk)
-		fetched_image = Image.open(temp_path)
-		fetched_image.load()
-		if not fetched_image.size == size:
-			fetched_image = fetched_image.resize(size)
-			fetched_image.save(temp_path, image_request.extension)
-		os.rename(
-			temp_path,
-			image_request.path,
-		)
-		return Image.open(image_request.path)
-	@staticmethod
-	def fetch(image_request: ImageRequest, callback: t.Callable = None, size: t.Tuple[int, int] = (745, 1040)):
-		if image_request in Fetcher.fetching:
-			if callback is not None:
-				Fetcher.fetching[image_request].append(callback)
-			return
-		Fetcher.fetching[image_request] = [callback] if callback is not None else []
-
-		if not os.path.exists(image_request.dir_path):
-			os.makedirs(image_request.dir_path)
-
-		result = Fetcher._fetch(image_request, size)
-
-		for subscibed_callback in Fetcher.fetching[image_request]:
-			subscibed_callback(image_request, result)
-		del Fetcher.fetching[image_request]
+		self._image_request = image_request
+		self._size = size
+		
 	def run(self):
-		Fetcher.fetch(
-			image_request= self.image_request,
-			callback = self.callback,
-			size = self.size,
-		)
+		try:
+			remote_card_response = r.get(self._image_request.remote_card_uri)
+		except Exception:
+			self._reject(ImageFetchException())
+			return
+		if not remote_card_response.ok:
+			self._reject(ImageFetchException())
+			return
+		
+		remote_card = remote_card_response.json()
+		try:
+			image_response = r.get(
+				remote_card['card_faces'][-1 if self._image_request.back else 0]['image_uris']['png']
+				if self._image_request.printing.cardboard.layout == Layout.TRANSFORM else
+				remote_card['image_uris']['png'],
+				stream=True,
+			)
+		except Exception:
+			self._reject(ImageFetchException())
+			return
+		if not image_response.ok:
+			self._reject(ImageFetchException())
+			return
+		
+		if not os.path.exists(self._image_request.dir_path):
+			os.makedirs(self._image_request.dir_path)
 
-class Cropper(threading.Thread):
-	cropping = SingleAccessDict()
-	def __init__(self, image_request: ImageRequest, callback: t.Callable = None, size: t.Tuple[int, int] = (560, 435)):
-		super().__init__()
-		self.image_request = image_request
-		self.image_request._crop = True
-		self.callback = callback
-		self.size = size
+		with tempfile.NamedTemporaryFile() as temp_file:
+			for chunk in image_response.iter_content(1024):
+				temp_file.write(chunk)
+			temp_file.seek(0)
+			fetched_image = Image.open(temp_file)
+			if not fetched_image.size == self._size:
+				fetched_image = fetched_image.resize(self._size)
+				fetched_image.save(
+					self._image_request.path,
+					self._image_request.extension
+				)
+				self._resolve(fetched_image)
+			else:
+				os.link(
+					temp_file.name,
+					self._image_request.path
+				)
+				self._resolve(fetched_image)
+
+	def get_promise(self):
+		try:
+			image = Image.open(self._image_request.path)
+			return Promise(
+				lambda resolve, reject:
+					resolve(image)
+			)
+		except FileNotFoundError:
+			existing_promise = Fetcher._fetching.get(self._image_request, None)
+			if existing_promise is None:
+				promise = Promise(self)
+				Fetcher._fetching[self._image_request] = promise
+				return promise
+			existing_promise.then(self._resolve, self._reject)
+			return existing_promise
+
+class Cropper(object):
 	@staticmethod
-	def cropped_image(image_request: ImageRequest):
-		img = Loader.get_image(
-			printing = image_request.printing,
-			back = image_request.back,
-			async = False,
-		)
-		return Cropper._cropped_image(
-			image = img,
-			layout = image_request.printing.cardboard.layout,
-		)
-	@staticmethod
-	def _cropped_image(image: Image.Image, layout: Layout):
+	def _crop_image(image: Image.Image, layout: Layout):
 		if layout == Layout.STANDARD:
 			return image.crop(
 				(92, 120, 652, 555)
@@ -192,35 +208,26 @@ class Cropper(threading.Thread):
 				(92, 120, 652, 555)
 			)
 	@staticmethod
-	def _crop(image_request: ImageRequest):
-		uncropped_request = copy.copy(image_request)
-		uncropped_request._crop = False
-		Cropper.cropped_image(uncropped_request).save(
-			image_request.path,
-			image_request.extension
-		)
-		return Image.open(image_request.path)
-	@staticmethod
-	def crop(image_request: ImageRequest, callback: t.Callable = None):
-		if image_request in Cropper.cropping:
-			if callback is not None:
-				Cropper.cropping[image_request].append(callback)
-			return
-		Cropper.cropping[image_request] = [callback] if callback is not None else []
-
+	def crop_image(image: Image.Image, image_request: ImageRequest) -> Image.Image:
 		if not os.path.exists(image_request.dir_path):
 			os.makedirs(image_request.dir_path)
-
-		result = Cropper._crop(image_request)
-
-		for subscibed_callback in Cropper.cropping[image_request]:
-			subscibed_callback(image_request, result)
-		del Cropper.cropping[image_request]
-	def run(self):
-		self.crop(
-			image_request = self.image_request,
-			callback = self.callback,
-		)
+		cropped_image = Cropper._crop_image(image, image_request.printing.cardboard.layout)
+		cropped_image.save(image_request.path, 'png')
+		return cropped_image
+	@staticmethod
+	def cropped_image(image_request: ImageRequest) -> Promise:
+		try:
+			image = Image.open(image_request.path)
+			return Promise(
+				lambda resolve, reject:
+					resolve(image)
+			)
+		except FileNotFoundError:
+			return (
+				Fetcher(image_request.cropped_as(False))
+				.get_promise()
+				.then(lambda v: Cropper.crop_image(v, image_request))
+			)
 
 class Loader(object):
 	@classmethod
@@ -229,45 +236,27 @@ class Loader(object):
 		printing: Printing = None,
 		back: bool = False,
 		crop: bool = False,
-		callback: t.Callable = None,
-		async: bool = True,
 		image_request: ImageRequest = None,
-	) -> Image.Image:
+	) -> Promise:
 		_image_request = ImageRequest(printing, back, crop) if image_request is None else image_request
-		try:
-			return cls._get_image(_image_request.path)
-		except FileNotFoundError:
-			if crop:
-				if async:
-					Cropper(_image_request, callback).start()
-					return cls._get_image(CARD_BACK_PATH)
-				else:
-					Cropper(_image_request).run()
-			else:
-				if async:
-					Fetcher(_image_request, callback).start()
-					return cls._get_image(CARD_BACK_PATH)
-				else:
-					Fetcher(_image_request).run()
-		return cls._get_image(_image_request.path)
-	@classmethod
-	@lru_cache(maxsize=128)
-	def _get_image(cls, path: str) -> Image.Image:
-		return Image.open(path)
+		if crop:
+			return Cropper.cropped_image(_image_request)
+		else:
+			Fetcher(_image_request).get_promise()
 
 def test():
 	from mtgorp.db import create, load
 	db = load.Loader.load()
 	# printing = db.cardboards['Fire // Ice'].printings.__iter__().__next__()
-	cardboard = db.cardboards['Bull Elephant']
+	cardboard = db.cardboards['Lava Axe']
 	# printing = db.printings[(db.expansions['CMD'], '198')]
-	printing = cardboard.printings.__iter__().__next__()
+	printing = cardboard.printing
 	print(printing)
 
-	def t(q, r):
-		print('callback', q.printing, r)
-
-	Loader.get_image(printing, crop = True, async = False)
+	Loader.get_image(printing, crop = True).done(
+		lambda v: v.save('lma.png'),
+		lambda v: print('failed', v),
+	)
 	# Loader.get_image(printing, crop = True, callback=t)
 
 if __name__ == '__main__':
