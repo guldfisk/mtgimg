@@ -5,6 +5,7 @@ import requests as r
 import tempfile
 
 from PIL import Image
+from functools import lru_cache
 
 from promise import Promise
 from appdirs import AppDirs
@@ -181,13 +182,16 @@ class Fetcher(Resolver):
 				self._resolve(fetched_image)
 
 	def get_promise(self):
+		print('fetcher get promise')
 		try:
-			image = Image.open(self._image_request.path)
+			image = Loader.open_image(self._image_request.path)
+			print('image loaded', image)
 			return Promise(
 				lambda resolve, reject:
 					resolve(image)
 			)
 		except FileNotFoundError:
+			print('file not found, fetching')
 			existing_promise = Fetcher._fetching.get(self._image_request, None)
 			if existing_promise is None:
 				promise = Promise(self)
@@ -217,7 +221,7 @@ class Cropper(object):
 	@staticmethod
 	def cropped_image(image_request: ImageRequest) -> Promise:
 		try:
-			image = Image.open(image_request.path)
+			image = Loader.open_image(image_request.path)
 			return Promise(
 				lambda resolve, reject:
 					resolve(image)
@@ -242,7 +246,16 @@ class Loader(object):
 		if crop:
 			return Cropper.cropped_image(_image_request)
 		else:
-			Fetcher(_image_request).get_promise()
+			return Fetcher(_image_request).get_promise()
+	@classmethod
+	def get_default_image(cls):
+		print('get default image')
+		return Promise(lambda resolve, reject: resolve(Loader.open_image(CARD_BACK_PATH)))
+	@classmethod
+	# @lru_cache(maxsize=128)
+	def open_image(cls, path):
+		print('open image', path)
+		return Image.open(path)
 
 def test():
 	from mtgorp.db import create, load
@@ -251,12 +264,16 @@ def test():
 	cardboard = db.cardboards['Lava Axe']
 	# printing = db.printings[(db.expansions['CMD'], '198')]
 	printing = cardboard.printing
-	print(printing)
 
-	Loader.get_image(printing, crop = True).done(
-		lambda v: v.save('lma.png'),
-		lambda v: print('failed', v),
-	)
+
+	image_1 = Loader.get_image(printing).get() #type: Image.Image
+	image_2 = Loader.get_image(printing).get() #type: Image.Image
+
+	print(image_1.size)
+	image_3 = image_1.resize((10, 10))
+	print(image_1.size, image_2.size, image_3.size)
+
+
 	# Loader.get_image(printing, crop = True, callback=t)
 
 if __name__ == '__main__':
