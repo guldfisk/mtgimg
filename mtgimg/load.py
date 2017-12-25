@@ -165,21 +165,19 @@ class Fetcher(Resolver):
 		with tempfile.NamedTemporaryFile() as temp_file:
 			for chunk in image_response.iter_content(1024):
 				temp_file.write(chunk)
-			temp_file.seek(0)
 			fetched_image = Image.open(temp_file)
 			if not fetched_image.size == self._size:
 				fetched_image = fetched_image.resize(self._size)
 				fetched_image.save(
 					self._image_request.path,
-					self._image_request.extension
+					self._image_request.extension,
 				)
-				self._resolve(fetched_image)
 			else:
 				os.link(
 					temp_file.name,
-					self._image_request.path
+					self._image_request.path,
 				)
-				self._resolve(fetched_image)
+			self._resolve(Image.open(self._image_request.path))
 
 	def get_promise(self):
 		print('fetcher get promise')
@@ -261,18 +259,16 @@ def test():
 	from mtgorp.db import create, load
 	db = load.Loader.load()
 	# printing = db.cardboards['Fire // Ice'].printings.__iter__().__next__()
-	cardboard = db.cardboards['Lava Axe']
-	# printing = db.printings[(db.expansions['CMD'], '198')]
-	printing = cardboard.printing
+	cardboard = db.cardboards['Time Spiral']
+	printing_1 = cardboard.from_expansion('USG')
+	# printing_2 = cardboard.from_expansion('M14')
 
+	image = Loader.get_image(printing_1)
 
-	image_1 = Loader.get_image(printing).get() #type: Image.Image
-	image_2 = Loader.get_image(printing).get() #type: Image.Image
-
-	print(image_1.size)
-	image_3 = image_1.resize((10, 10))
-	print(image_1.size, image_2.size, image_3.size)
-
+	# printings = (printing_1, printing_2)
+	#
+	# images = Promise.all(tuple(Loader.get_image(printing) for printing in printings)).get()
+	# print(images)
 
 	# Loader.get_image(printing, crop = True, callback=t)
 
