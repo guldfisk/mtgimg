@@ -13,6 +13,8 @@ setup(
 		'lazy-property',
 		'mtgorp',
 		'orp',
-		'pillow'
+		'pillow',
+		'requests',
+		'promise',
 	]
 )

@@ -1,5 +1,4 @@
 import os
-import os
 import tempfile
 import typing as t
 from concurrent.futures import Executor, ThreadPoolExecutor
@@ -8,99 +7,14 @@ from threading import Condition, Lock
 
 import requests as r
 from PIL import Image
-from appdirs import AppDirs
-from lazy_property import LazyProperty
 from promise import Promise
 
 from mtgorp.models.persistent.attributes.layout import Layout
 from mtgorp.models.persistent.printing import Printing
 
-APP_DATA_PATH = AppDirs('mtgimg', 'mtgimg').user_data_dir
-IMAGES_PATH = os.path.join(APP_DATA_PATH, 'images')
-CARD_BACK_DIRECTORY_PATH = os.path.join(
-	os.path.dirname(os.path.realpath(__file__)),
-	'cardback',
-)
-CARD_BACK_PATH = os.path.join(
-	CARD_BACK_DIRECTORY_PATH,
-	'cardback.png',
-)
-
-class ImageRequest(object):
-	def __init__(self, printing: Printing, back: bool = False, crop: bool = False):
-		self._printing = printing
-		self._back = back
-		self._crop = crop
-	@LazyProperty
-	def has_image(self) -> bool:
-		if self._back:
-			return bool(self._printing.cardboard.back_cards)
-		else:
-			return bool(self._printing.cardboard.front_cards)
-	def _name_no_extension(self) -> str:
-		if self._back:
-			if self.has_image:
-				return str(self._printing.collector_number) + 'b'
-			return 'cardback'
-		if len(tuple(self._printing.cardboard.cards))>1:
-			return str(self._printing.collector_number) + 'a'
-		return str(self._printing.collector_number)
-	@property
-	def name(self) -> str:
-		return self._name_no_extension() + ('_crop' if self._crop else '')
-	@property
-	def extension(self) -> str:
-		return 'png'
-	@LazyProperty
-	def dir_path(self) -> str:
-		if self.has_image:
-			return os.path.join(
-				IMAGES_PATH,
-				self._printing.expansion.code,
-			)
-		return CARD_BACK_DIRECTORY_PATH
-	@LazyProperty
-	def path(self) -> str:
-		return os.path.join(
-			self.dir_path,
-			self.name + '.' + self.extension,
-		)
-	@LazyProperty
-	def remote_card_uri(self) -> str:
-		return 'https://api.scryfall.com/cards/multiverse/{}'.format(self.printing.id)
-	@property
-	def printing(self):
-		return self._printing
-	@property
-	def back(self):
-		return self._back
-	@property
-	def crop(self):
-		return self._crop
-	def cropped_as(self, crop: bool):
-		return self.__class__(self._printing, self._back, crop)
-	def __hash__(self):
-		return hash(
-			(
-				self._printing,
-				self._back,
-				self._crop,
-			)
-		)
-	def __eq__(self, other):
-		return (
-			isinstance(other, self.__class__)
-			and self._printing == other._printing
-			and self._back == other._back
-			and self._crop == other._crop
-		)
-	def __repr__(self):
-		return '{}({}, {}, {})'.format(
-			self.__class__.__name__,
-			self._printing,
-			self._back,
-			self._crop,
-		)
+from mtgimg import paths
+from mtgimg.request import ImageRequest
+from mtgimg import crop as image_crop
 
 class TaskAwaiter(object):
 	def __init__(self):
@@ -183,20 +97,10 @@ class _Cropper(object):
 	_cropping = TaskAwaiter()
 
 	@classmethod
-	def _crop_image(cls, image: Image.Image, layout: Layout) -> Image.Image:
-		if layout == Layout.STANDARD:
-			return image.crop(
-				(92, 120, 652, 555)
-			)
-		else:
-			return image.crop(
-				(92, 120, 652, 555)
-			)
-	@classmethod
 	def _cropped_image(cls, condition: Condition, image: Image.Image, image_request: ImageRequest) -> Image.Image:
 		if not os.path.exists(image_request.dir_path):
 			os.makedirs(image_request.dir_path)
-		cropped_image = _Cropper._crop_image(image, image_request.printing.cardboard.layout)
+		cropped_image = image_crop.crop(image, image_request)
 		cropped_image.save(image_request.path, image_request.extension)
 		with condition:
 			condition.notify_all()
@@ -218,11 +122,9 @@ class _Cropper(object):
 					image_request,
 				)
 
-
-
 class Loader(object):
 	def __init__(self, executor: Executor = None):
-		self._executor = executor if executor is not None else ThreadPoolExecutor(max_workers=5)
+		self._executor = executor if executor is not None else ThreadPoolExecutor(max_workers=10)
 
 	def get_image(
 		self,
@@ -239,7 +141,7 @@ class Loader(object):
 	def get_default_image(self):
 		return Promise.resolve(
 			self._executor.submit(
-				lambda : Loader.open_image(CARD_BACK_PATH)
+				lambda : Loader.open_image(paths.CARD_BACK_PATH)
 			)
 		)
 	@classmethod
@@ -251,13 +153,16 @@ def test():
 	import time
 	from mtgorp.db import load
 
-	print(IMAGES_PATH)
+	print(paths.IMAGES_PATH)
 
 	image_loader = Loader()
 	db = load.Loader.load()
 
-	cardboard = db.cardboards['Time Spiral']
-	printing = cardboard.from_expansion('USG')
+	# cardboard = db.cardboards['Time Spiral']
+	cardboard = db.cardboards['Fire // Ice']
+	# printing = cardboard.from_expansion('USG')
+	printing = cardboard.from_expansion('APC')
+	print(printing, cardboard.printings)
 	# printing_2 = cardboard.from_expansion('M14')
 
 	st = time.time()
