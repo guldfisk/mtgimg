@@ -6,21 +6,25 @@ from mtgorp.models.persistent.attributes.layout import Layout
 
 from mtgimg.request import ImageRequest
 
+
 CROPPED_SIZE = (560, 435)
 
 
 def _split_horizontal(width: int, height: int, images: t.Tuple[Image.Image, ...]):
 	offset = width // len(images)
+
 	canvas = Image.new(
 		'RGBA',
 		(width, height),
 		(0, 0, 0, 0),
 	)
+
 	for index, image in enumerate(images):
 		canvas.paste(
 			image.crop((0, 0, offset, height)),
 			(index*offset, 0, (index+1)*offset, height)
 		)
+
 	return canvas
 
 
@@ -57,13 +61,27 @@ def _crop_aftermath(image: Image.Image) -> Image.Image:
 	return top.resize((1149, 435)).crop((294, 0, 854, 435))
 
 
+def _crop_sage(image: Image.Image) -> Image.Image:
+	#todo fix when sagas have proper layout.
+	# _image = image.crop((371, 115, 686, 872))
+	# _image.show()
+	return _crop_standard(image)
+
+
 def crop(image: Image.Image, image_request: ImageRequest) -> Image.Image:
 	layout = image_request.printing.cardboard.layout
+
 	if layout == Layout.STANDARD:
 		return _crop_standard(image)
+
 	elif layout == Layout.SPLIT and len(image_request.printing.cardboard.front_cards) == 2:
 		return _crop_split(image)
+
 	elif layout == Layout.AFTERMATH and len(image_request.printing.cardboard.front_cards) == 2:
 		return _crop_aftermath(image)
+
+	elif layout == Layout.SAGA:
+		return _crop_sage(image)
+
 	else:
 		return _crop_standard(image)
