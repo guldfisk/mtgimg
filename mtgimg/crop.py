@@ -3,6 +3,7 @@ import typing as t
 from PIL import Image
 
 from mtgorp.models.persistent.attributes.layout import Layout
+from mtgorp.models.persistent.attributes.cardtypes import CardSubType
 
 from mtgimg.request import ImageRequest
 
@@ -62,16 +63,25 @@ def _crop_aftermath(image: Image.Image) -> Image.Image:
 
 
 def _crop_sage(image: Image.Image) -> Image.Image:
-	#todo fix when sagas have proper layout.
-	# _image = image.crop((371, 115, 686, 872))
-	# _image.show()
-	return _crop_standard(image)
+	return (
+		image
+			.crop((373, 115, 686, 872))
+			.rotate(-90, expand=1)
+			.resize((1052, 435))
+			.crop((246, 0, 806, 435))
+	)
+
+
+SAGA_SUB_TYPE = CardSubType('Saga')
 
 
 def crop(image: Image.Image, image_request: ImageRequest) -> Image.Image:
 	layout = image_request.printing.cardboard.layout
 
-	if layout == Layout.STANDARD:
+	if layout == Layout.SAGA or SAGA_SUB_TYPE in image_request.printing.cardboard.front_card.card_type.sub_types:
+		return _crop_sage(image)
+
+	elif layout == Layout.STANDARD:
 		return _crop_standard(image)
 
 	elif layout == Layout.SPLIT and len(image_request.printing.cardboard.front_cards) == 2:
@@ -80,8 +90,6 @@ def crop(image: Image.Image, image_request: ImageRequest) -> Image.Image:
 	elif layout == Layout.AFTERMATH and len(image_request.printing.cardboard.front_cards) == 2:
 		return _crop_aftermath(image)
 
-	elif layout == Layout.SAGA:
-		return _crop_sage(image)
-
 	else:
 		return _crop_standard(image)
+
