@@ -3,7 +3,7 @@ import typing as t
 from PIL import Image
 
 from mtgorp.models.persistent.attributes.layout import Layout
-from mtgorp.models.persistent.attributes.cardtypes import CardSubType
+from mtgorp.models.persistent.attributes import typeline
 
 from mtgimg.request import ImageRequest
 
@@ -72,13 +72,10 @@ def _crop_sage(image: Image.Image) -> Image.Image:
 	)
 
 
-SAGA_SUB_TYPE = CardSubType('Saga')
-
-
 def crop(image: Image.Image, image_request: ImageRequest) -> Image.Image:
 	layout = image_request.printing.cardboard.layout
 
-	if layout == Layout.SAGA or SAGA_SUB_TYPE in image_request.printing.cardboard.front_card.card_type.sub_types:
+	if layout == Layout.SAGA or typeline.SAGA in image_request.printing.cardboard.front_card.type_line:
 		return _crop_sage(image)
 
 	elif layout == Layout.STANDARD:

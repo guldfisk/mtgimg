@@ -16,10 +16,13 @@ from mtgimg import paths
 from mtgimg.request import ImageRequest
 from mtgimg import crop as image_crop
 
+
 class TaskAwaiter(object):
+
 	def __init__(self):
 		self._lock = Lock()
 		self._map = dict() #type: t.Dict[ImageRequest, Condition]
+
 	def get_condition(self, image_request: ImageRequest) -> t.Tuple[Condition, bool]:
 		with self._lock:
 			previous_condition = self._map.get(image_request, None)
@@ -29,8 +32,10 @@ class TaskAwaiter(object):
 				return condition, False
 			return previous_condition, True
 
+
 class ImageFetchException(Exception):
 	pass
+
 
 class _Fetcher(object):
 	_fetching = TaskAwaiter()
@@ -47,6 +52,7 @@ class _Fetcher(object):
 			raise ImageFetchException(remote_card_response.status_code)
 		
 		remote_card = remote_card_response.json()
+
 		try:
 			image_response = r.get(
 				remote_card['card_faces'][-1 if image_request.back else 0]['image_uris']['png']
@@ -56,6 +62,7 @@ class _Fetcher(object):
 			)
 		except Exception as e:
 			raise ImageFetchException(e)
+
 		if not image_response.ok:
 			raise ImageFetchException(remote_card_response.status_code)
 		
@@ -93,6 +100,7 @@ class _Fetcher(object):
 				cls._fetch_image(condition, image_request)
 			return Loader.open_image(image_request.path)
 
+
 class _Cropper(object):
 	_cropping = TaskAwaiter()
 
@@ -105,6 +113,7 @@ class _Cropper(object):
 		with condition:
 			condition.notify_all()
 		return cropped_image
+
 	@classmethod
 	def cropped_image(cls, image_request: ImageRequest) -> Image.Image:
 		try:
@@ -122,7 +131,9 @@ class _Cropper(object):
 					image_request,
 				)
 
+
 class Loader(object):
+
 	def __init__(self, executor: Executor = None):
 		self._executor = executor if executor is not None else ThreadPoolExecutor(max_workers=10)
 
@@ -138,16 +149,19 @@ class Loader(object):
 			return Promise.resolve(self._executor.submit(_Cropper.cropped_image, _image_request))
 		else:
 			return Promise.resolve(self._executor.submit(_Fetcher.get_image, _image_request))
+
 	def get_default_image(self):
 		return Promise.resolve(
 			self._executor.submit(
 				lambda : Loader.open_image(paths.CARD_BACK_PATH)
 			)
 		)
+
 	@classmethod
 	@lru_cache(maxsize=128)
 	def open_image(cls, path):
 		return Image.open(path)
+
 
 def test():
 	import time
