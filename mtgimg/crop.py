@@ -40,7 +40,10 @@ def _crop_split(image: Image.Image) -> Image.Image:
 		CROPPED_SIZE[0],
 		CROPPED_SIZE[1],
 		tuple(
-			image.crop(box).rotate(-90, expand=1).resize((650, 435))
+			image
+				.crop(box)
+				.rotate(-90, expand=1)
+				.resize((650, 435))
 			for box in
 			(
 				(96, 82, 345, 454),
@@ -66,27 +69,26 @@ def _crop_sage(image: Image.Image) -> Image.Image:
 	return (
 		image
 			.crop((373, 115, 686, 872))
-			.rotate(-90, expand=1)
+			.rotate(-90, expand=True)
 			.resize((1052, 435))
 			.crop((246, 0, 806, 435))
 	)
 
 
 def crop(image: Image.Image, image_request: ImageRequest) -> Image.Image:
-	layout = image_request.printing.cardboard.layout
+	layout = image_request.pictured.cardboard.layout
 
-	if layout == Layout.SAGA or typeline.SAGA in image_request.printing.cardboard.front_card.type_line:
+	if layout == Layout.SAGA or typeline.SAGA in image_request.pictured.cardboard.front_card.type_line:
 		return _crop_sage(image)
 
-	elif layout == Layout.STANDARD:
+	if layout == Layout.STANDARD:
 		return _crop_standard(image)
 
-	elif layout == Layout.SPLIT and len(image_request.printing.cardboard.front_cards) == 2:
+	if layout == Layout.SPLIT and len(image_request.pictured.cardboard.front_cards) == 2:
 		return _crop_split(image)
 
-	elif layout == Layout.AFTERMATH and len(image_request.printing.cardboard.front_cards) == 2:
+	if layout == Layout.AFTERMATH and len(image_request.pictured.cardboard.front_cards) == 2:
 		return _crop_aftermath(image)
 
-	else:
-		return _crop_standard(image)
+	return _crop_standard(image)
 

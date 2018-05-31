@@ -2,7 +2,6 @@ import os
 import tempfile
 import typing as t
 from concurrent.futures import Executor, ThreadPoolExecutor
-from functools import lru_cache
 from threading import Condition, Lock
 
 import requests as r
@@ -10,10 +9,9 @@ from PIL import Image
 from promise import Promise
 
 from mtgorp.models.persistent.attributes.layout import Layout
-from mtgorp.models.persistent.printing import Printing
 
 from mtgimg import paths
-from mtgimg.request import ImageRequest
+from mtgimg.request import ImageRequest, Imageable, ImageLoader, picturable
 from mtgimg import crop as image_crop
 
 
@@ -37,26 +35,58 @@ class ImageFetchException(Exception):
 	pass
 
 
-class _Fetcher(object):
+class _ImageProcessor(object):
+	_size = (745, 1040)
+
+	@classmethod
+	def save_imageable(cls, image_request: ImageRequest, loader: ImageLoader, condition: Condition) -> Image.Image:
+		image = image_request.pictured.get_image(
+			cls._size,
+			loader,
+			image_request.back,
+			image_request.crop,
+		)
+
+		if image.size != cls._size:
+			image = image.resize(cls._size)
+
+		if not os.path.exists(image_request.dir_path):
+			os.makedirs(image_request.dir_path)
+
+		image.save(image_request.path)
+
+		with condition:
+			condition.notify_all()
+
+		return image
+
+
+
+class _Fetcher(_ImageProcessor):
 	_fetching = TaskAwaiter()
 	_size = (745, 1040)
 
 	@classmethod
 	def _fetch_image(cls, condition: Condition, image_request: ImageRequest):
-
 		try:
 			remote_card_response = r.get(image_request.remote_card_uri)
 		except Exception as e:
 			raise ImageFetchException(e)
+
 		if not remote_card_response.ok:
 			raise ImageFetchException(remote_card_response.status_code)
 		
 		remote_card = remote_card_response.json()
 
 		try:
+			if image_request.pictured.cardboard.layout == Layout.MELD and image_request.back:
+				for part in remote_card['all_parts']:
+					if part['name'] == image_request.pictured.cardboard.back_card.name:
+						remote_card = r.get(part['uri']).json()
+
 			image_response = r.get(
 				remote_card['card_faces'][-1 if image_request.back else 0]['image_uris']['png']
-				if image_request.printing.cardboard.layout == Layout.TRANSFORM else
+				if image_request.pictured.cardboard.layout == Layout.TRANSFORM else
 				remote_card['image_uris']['png'],
 				stream=True,
 			)
@@ -72,6 +102,7 @@ class _Fetcher(object):
 		with tempfile.NamedTemporaryFile() as temp_file:
 			for chunk in image_response.iter_content(1024):
 				temp_file.write(chunk)
+
 			fetched_image = Image.open(temp_file)
 			if not fetched_image.size == cls._size:
 				fetched_image = fetched_image.resize(cls._size)
@@ -84,24 +115,36 @@ class _Fetcher(object):
 					temp_file.name,
 					image_request.path,
 				)
+
 			with condition:
 				condition.notify_all()
 
 	@classmethod
-	def get_image(cls, image_request: ImageRequest):
+	def get_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
 		try:
 			return Loader.open_image(image_request.path)
 		except FileNotFoundError:
-			condition, in_progress = cls._fetching.get_condition(image_request)
-			if in_progress:
-				with condition:
-					condition.wait()
-			else:
-				cls._fetch_image(condition, image_request)
-			return Loader.open_image(image_request.path)
+			pass
+
+		condition, in_progress = cls._fetching.get_condition(image_request)
+
+		if in_progress:
+			with condition:
+				condition.wait()
+		else:
+			if isinstance(image_request.pictured, Imageable):
+				return cls.save_imageable(
+					image_request,
+					loader,
+					condition,
+				)
+			cls._fetch_image(condition, image_request)
+
+		return Loader.open_image(image_request.path)
 
 
-class _Cropper(object):
+class _Cropper(_ImageProcessor):
+	_size = (560, 435)
 	_cropping = TaskAwaiter()
 
 	@classmethod
@@ -115,52 +158,81 @@ class _Cropper(object):
 		return cropped_image
 
 	@classmethod
-	def cropped_image(cls, image_request: ImageRequest) -> Image.Image:
+	def cropped_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
 		try:
 			return Loader.open_image(image_request.path)
 		except FileNotFoundError:
-			condition, in_progress = cls._cropping.get_condition(image_request)
-			if in_progress:
-				with condition:
-					condition.wait()
-				return Loader.open_image(image_request.path)
-			else:
-				return cls._cropped_image(
-					condition,
-					_Fetcher.get_image(image_request.cropped_as(False)),
-					image_request,
-				)
+			pass
+
+		condition, in_progress = cls._cropping.get_condition(image_request)
+		if in_progress:
+			with condition:
+				condition.wait()
+			return Loader.open_image(image_request.path)
+
+		if isinstance(image_request.pictured, Imageable):
+			return cls.save_imageable(
+				image_request,
+				loader,
+				condition,
+			)
+
+		return cls._cropped_image(
+			condition,
+			_Fetcher.get_image(image_request.cropped_as(False), loader),
+			image_request,
+		)
 
 
-class Loader(object):
+class Loader(ImageLoader):
 
-	def __init__(self, executor: Executor = None):
-		self._executor = executor if executor is not None else ThreadPoolExecutor(max_workers=10)
+	def __init__(self, executor: t.Union[Executor, int] = None):
+		self._executor = (
+			executor
+			if executor is isinstance(executor, Executor) else
+			ThreadPoolExecutor(
+				max_workers = executor if isinstance(executor, int) else 10
+			)
+		)
 
 	def get_image(
 		self,
-		printing: Printing = None,
+		pictured: picturable = None,
 		back: bool = False,
 		crop: bool = False,
 		image_request: ImageRequest = None,
 	) -> Promise:
-		_image_request = ImageRequest(printing, back, crop) if image_request is None else image_request
-		if _image_request.crop:
-			return Promise.resolve(self._executor.submit(_Cropper.cropped_image, _image_request))
-		else:
-			return Promise.resolve(self._executor.submit(_Fetcher.get_image, _image_request))
 
-	def get_default_image(self):
+		_image_request = (
+			ImageRequest(pictured, back, crop)
+			if image_request is None else
+			image_request
+		)
+
+		if _image_request.crop:
+			return Promise.resolve(
+				self._executor.submit(
+					_Cropper.cropped_image,
+					_image_request,
+					self,
+				)
+			)
+
+		else:
+			return Promise.resolve(
+				self._executor.submit(
+					_Fetcher.get_image,
+					_image_request,
+					self,
+				)
+			)
+
+	def get_default_image(self) -> Promise:
 		return Promise.resolve(
 			self._executor.submit(
 				lambda : Loader.open_image(paths.CARD_BACK_PATH)
 			)
 		)
-
-	@classmethod
-	@lru_cache(maxsize=128)
-	def open_image(cls, path):
-		return Image.open(path)
 
 
 def test():
