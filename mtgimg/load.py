@@ -11,7 +11,7 @@ from promise import Promise
 from mtgorp.models.persistent.attributes.layout import Layout
 
 from mtgimg import paths
-from mtgimg.request import ImageRequest, Imageable, ImageLoader, picturable
+from mtgimg.interface import ImageRequest, Imageable, ImageLoader, picturable
 from mtgimg import crop as image_crop
 
 
@@ -52,6 +52,8 @@ class _ImageProcessor(object):
 
 		if not os.path.exists(image_request.dir_path):
 			os.makedirs(image_request.dir_path)
+
+		print(image_request, image_request.path)
 
 		image.save(image_request.path)
 

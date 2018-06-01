@@ -5,7 +5,7 @@ from PIL import Image
 from mtgorp.models.persistent.attributes.layout import Layout
 from mtgorp.models.persistent.attributes import typeline
 
-from mtgimg.request import ImageRequest
+from mtgimg.interface import ImageRequest
 
 
 CROPPED_SIZE = (560, 435)

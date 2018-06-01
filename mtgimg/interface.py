@@ -60,17 +60,27 @@ class ImageRequest(object):
 
 	def _name_no_extension(self) -> str:
 		if self._back:
+
 			if self.has_image:
-				return str(self._pictured.id) + 'b'
+				return (
+					self._pictured.get_image_name()
+					if isinstance(self._pictured, Imageable) else
+					str(self._pictured.id)
+				) + '_b'
+
 			return 'cardback'
-		return str(self._pictured.id)
+
+		return (
+			self._pictured.get_image_name()
+			if isinstance(self._pictured, Imageable) else
+			str(self._pictured.id)
+		)
 
 	@property
 	def name(self) -> str:
 		return (
-			self._pictured.get_image_name()
-			if isinstance(self._pictured, Imageable) else
-			self._name_no_extension() + ('_crop' if self._crop else '')
+			self._name_no_extension()
+			+ ('_crop' if self._crop else '')
 		)
 
 	@property
@@ -100,7 +110,7 @@ class ImageRequest(object):
 
 	@LazyProperty
 	def remote_card_uri(self) -> str:
-		return 'https://api.scryfall.com/cards/multiverse/{}'.format(self.pictured.id)
+		return f'https://api.scryfall.com/cards/multiverse/{self.pictured.id}'
 
 	@property
 	def pictured(self) -> picturable:
