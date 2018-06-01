@@ -93,7 +93,7 @@ class ImageRequest(object):
 			if isinstance(self._pictured, Imageable):
 				return os.path.join(
 					paths.IMAGES_PATH,
-					self._pictured.get_image_dir_name(),
+					'_'+self._pictured.get_image_dir_name(),
 				)
 			return os.path.join(
 				paths.IMAGES_PATH,

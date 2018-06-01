@@ -53,8 +53,6 @@ class _ImageProcessor(object):
 		if not os.path.exists(image_request.dir_path):
 			os.makedirs(image_request.dir_path)
 
-		print(image_request, image_request.path)
-
 		image.save(image_request.path)
 
 		with condition:
