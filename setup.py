@@ -11,7 +11,7 @@ setup(
 		'https://github.com/guldfisk/orp/tarball/master#egg=orp-1.0',
 	],
 	package_data = {
-		'mtgimg': [os.path.join('mtgimg', 'cardback', 'cardback.png')],
+		'mtgimg': [os.path.join('cardback', 'cardback.png')],
 	},
 	include_package_data = True,
 	install_requires = [
