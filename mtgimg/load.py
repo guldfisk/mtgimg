@@ -14,9 +14,12 @@ from mtgimg import paths
 from mtgimg.interface import ImageRequest, Imageable, ImageLoader, picturable
 from mtgimg import crop as image_crop
 
-
 IMAGE_SIZE = (745, 1040)
 CROPPED_IMAGE_SIZE = (560, 435)
+
+IMAGE_WIDTH, IMAGE_HEIGHT = IMAGE_SIZE
+
+CROPPED_IMAGE_WIDTH, CROPPED_IMAGE_HEIGHT = CROPPED_IMAGE_SIZE
 
 
 class TaskAwaiter(object):
@@ -155,10 +158,12 @@ class _Fetcher(object):
 
 	@classmethod
 	def get_image(cls, image_request: ImageRequest) -> Image.Image:
+
 		try:
 			return Loader.open_image(image_request.path)
 		except FileNotFoundError:
-			pass
+			if not image_request.has_image:
+				raise ImageFetchException('Missing default image')
 
 		condition, in_progress = cls._fetching.get_condition(image_request)
 
@@ -277,3 +282,4 @@ class Loader(ImageLoader):
 				lambda : Loader.open_image(paths.CARD_BACK_PATH)
 			)
 		)
+
