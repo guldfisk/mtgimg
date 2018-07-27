@@ -136,25 +136,43 @@ class _Fetcher(object):
 		if not os.path.exists(image_request.dir_path):
 			os.makedirs(image_request.dir_path)
 
-		with tempfile.NamedTemporaryFile() as temp_file:
+		temp_path = os.path.join(image_request.dir_path, '_' + image_request.name + '.' + image_request.extension)
+
+		with open(temp_path, 'wb') as temp_file:
 			for chunk in image_response.iter_content(1024):
 				temp_file.write(chunk)
 
-			fetched_image = Image.open(temp_file)
+			with open(temp_path, 'rb') as f:
+				fetched_image = Image.open(f)
 			if not fetched_image.size == cls._size:
 				fetched_image = fetched_image.resize(cls._size)
-				fetched_image.save(
+				fetched_image._save_as(
 					image_request.path,
 					image_request.extension,
 				)
 			else:
-				os.link(
-					temp_file.name,
-					image_request.path,
-				)
+				os.rename(temp_path, image_request.path)
 
-			with condition:
-				condition.notify_all()
+		# Hard link rekked
+		# with tempfile.NamedTemporaryFile() as temp_file:
+		# 	for chunk in image_response.iter_content(1024):
+		# 		temp_file.write(chunk)
+		#
+		# 	fetched_image = Image.open(temp_file)
+		# 	if not fetched_image.size == cls._size:
+		# 		fetched_image = fetched_image.resize(cls._size)
+		# 		fetched_image.save(
+		# 			image_request.path,
+		# 			image_request.extension,
+		# 		)
+		# 	else:
+		# 		os.link(
+		# 			temp_file.name,
+		# 			image_request.path,
+		# 		)
+
+		with condition:
+			condition.notify_all()
 
 	@classmethod
 	def get_image(cls, image_request: ImageRequest) -> Image.Image:
