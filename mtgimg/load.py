@@ -1,6 +1,6 @@
-import os
-import tempfile
 import typing as t
+
+import os
 from concurrent.futures import Executor, ThreadPoolExecutor
 from threading import Condition, Lock
 
@@ -13,6 +13,7 @@ from mtgorp.models.persistent.attributes.layout import Layout
 from mtgimg import paths
 from mtgimg.interface import ImageRequest, Imageable, ImageLoader, picturable
 from mtgimg import crop as image_crop
+
 
 IMAGE_SIZE = (745, 1040)
 CROPPED_IMAGE_SIZE = (560, 435)
@@ -106,7 +107,7 @@ class _Fetcher(object):
 	@classmethod
 	def _fetch_image(cls, condition: Condition, image_request: ImageRequest):
 		try:
-			remote_card_response = r.get(image_request.remote_card_uri)
+			remote_card_response = r.request('GET', image_request.remote_card_uri, timeout = 30)
 		except Exception as e:
 			raise ImageFetchException(e)
 
@@ -119,14 +120,17 @@ class _Fetcher(object):
 			if image_request.pictured.cardboard.layout == Layout.MELD and image_request.back:
 				for part in remote_card['all_parts']:
 					if part['name'] == image_request.pictured.cardboard.back_card.name:
-						remote_card = r.get(part['uri']).json()
+						remote_card = r.request('GET', part['uri'], timeout = 30).json()
 
-			image_response = r.get(
+			image_response = r.request(
+				'GET',
 				remote_card['card_faces'][-1 if image_request.back else 0]['image_uris']['png']
 				if image_request.pictured.cardboard.layout == Layout.TRANSFORM else
 				remote_card['image_uris']['png'],
 				stream=True,
+				timeout = 30,
 			)
+
 		except Exception as e:
 			raise ImageFetchException(e)
 
@@ -144,9 +148,10 @@ class _Fetcher(object):
 
 			with open(temp_path, 'rb') as f:
 				fetched_image = Image.open(f)
+
 			if not fetched_image.size == cls._size:
 				fetched_image = fetched_image.resize(cls._size)
-				fetched_image._save_as(
+				fetched_image.save(
 					image_request.path,
 					image_request.extension,
 				)
@@ -262,7 +267,6 @@ class Loader(ImageLoader):
 		crop: bool = False,
 		image_request: ImageRequest = None,
 	) -> Promise:
-
 		_image_request = (
 			ImageRequest(pictured, back, crop)
 			if image_request is None else
