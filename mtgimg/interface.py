@@ -42,10 +42,11 @@ picturable = t.Union[Imageable, Printing]
 
 class ImageRequest(object):
 
-	def __init__(self, pictured: picturable, back: bool = False, crop: bool = False):
+	def __init__(self, pictured: picturable, back: bool = False, crop: bool = False, save: bool = True):
 		self._pictured = pictured
 		self._back = back
 		self._crop = crop
+		self._save = save
 
 	@LazyProperty
 	def has_image(self) -> bool:
@@ -124,6 +125,10 @@ class ImageRequest(object):
 	def crop(self) -> bool:
 		return self._crop
 
+	@property
+	def save(self) -> bool:
+		return self._save
+
 	def cropped_as(self, crop: bool) -> 'ImageRequest':
 		return self.__class__(self._pictured, self._back, crop)
 
@@ -161,6 +166,7 @@ class ImageLoader(ABC):
 		pictured: picturable = None,
 		back: bool = False,
 		crop: bool = False,
+		save: bool = True,
 		image_request: ImageRequest = None,
 	) -> Promise:
 		pass

@@ -22,19 +22,36 @@ IMAGE_WIDTH, IMAGE_HEIGHT = IMAGE_SIZE
 
 CROPPED_IMAGE_WIDTH, CROPPED_IMAGE_HEIGHT = CROPPED_IMAGE_SIZE
 
+T = t.TypeVar('T')
 
-class TaskAwaiter(object):
+
+class ConditionWithValue(Condition, t.Generic[T]):
+
+	def __init__(self):
+		super().__init__()
+		self._value = None #type: T
+
+	@property
+	def value(self) -> T:
+		return self._value
+
+	def resolve(self, value: T):
+		self._value = value
+		self.notify_all()
+
+
+class TaskAwaiter(t.Generic[T]):
 
 	def __init__(self):
 		self._lock = Lock()
-		self._map = dict() #type: t.Dict[ImageRequest, Condition]
+		self._map = dict() #type: t.Dict[ImageRequest, ConditionWithValue[T]]
 
-	def get_condition(self, image_request: ImageRequest) -> t.Tuple[Condition, bool]:
+	def get_condition(self, image_request: ImageRequest) -> t.Tuple[ConditionWithValue[T], bool]:
 		with self._lock:
 			previous_condition = self._map.get(image_request, None)
 
 			if previous_condition is None:
-				condition = Condition()
+				condition = ConditionWithValue()
 				self._map[image_request] = condition
 				return condition, False
 
@@ -46,7 +63,7 @@ class ImageFetchException(Exception):
 
 
 class _ImageableProcessor(object):
-	_processing = TaskAwaiter()
+	_processing = TaskAwaiter() #type: TaskAwaiter[Image.Image]
 
 	@classmethod
 	def _save_imageable(
@@ -54,7 +71,7 @@ class _ImageableProcessor(object):
 		image_request: ImageRequest,
 		size: t.Tuple[int, int],
 		loader: ImageLoader,
-		condition: Condition
+		condition: ConditionWithValue[Image.Image],
 	) -> Image.Image:
 
 		image = image_request.pictured.get_image(
@@ -67,37 +84,46 @@ class _ImageableProcessor(object):
 		if image.size != size:
 			image = image.resize(size)
 
-		if not os.path.exists(image_request.dir_path):
-			os.makedirs(image_request.dir_path)
+		if image_request.save:
+			if not os.path.exists(image_request.dir_path):
+				os.makedirs(image_request.dir_path)
 
-		image.save(image_request.path)
+			image.save(image_request.path)
 
 		with condition:
-			condition.notify_all()
+			condition.resolve(image)
 
 		return image
 
 	@classmethod
 	def get_image(cls, image_request: ImageRequest, loader: ImageLoader):
 		try:
-			return Loader.open_image(image_request.path)
-		except FileNotFoundError:
-			pass
+			try:
+				return Loader.open_image(image_request.path)
+			except FileNotFoundError:
+				pass
+			except Exception as e:
+				print('inner joke', e, image_request)
+				raise e
 
-		condition, in_progress = cls._processing.get_condition(image_request)
+			condition, in_progress = cls._processing.get_condition(image_request)
 
-		if in_progress:
-			with condition:
-				condition.wait()
+			if in_progress:
+				with condition:
+					condition.wait()
 
-			return Loader.open_image(image_request.path)
+				return condition.value
 
-		return cls._save_imageable(
-			image_request,
-			CROPPED_IMAGE_SIZE if image_request.crop else IMAGE_SIZE,
-			loader,
-			condition,
-		)
+			return cls._save_imageable(
+				image_request,
+				CROPPED_IMAGE_SIZE if image_request.crop else IMAGE_SIZE,
+				loader,
+				condition,
+			)
+
+		except Exception as e:
+			print(e, image_request)
+			raise e
 
 
 class _Fetcher(object):
@@ -158,45 +184,36 @@ class _Fetcher(object):
 			else:
 				os.rename(temp_path, image_request.path)
 
-		# Hard link rekked
-		# with tempfile.NamedTemporaryFile() as temp_file:
-		# 	for chunk in image_response.iter_content(1024):
-		# 		temp_file.write(chunk)
-		#
-		# 	fetched_image = Image.open(temp_file)
-		# 	if not fetched_image.size == cls._size:
-		# 		fetched_image = fetched_image.resize(cls._size)
-		# 		fetched_image.save(
-		# 			image_request.path,
-		# 			image_request.extension,
-		# 		)
-		# 	else:
-		# 		os.link(
-		# 			temp_file.name,
-		# 			image_request.path,
-		# 		)
-
 		with condition:
 			condition.notify_all()
 
 	@classmethod
 	def get_image(cls, image_request: ImageRequest) -> Image.Image:
-
 		try:
-			return Loader.open_image(image_request.path)
-		except FileNotFoundError:
-			if not image_request.has_image:
-				raise ImageFetchException('Missing default image')
 
-		condition, in_progress = cls._fetching.get_condition(image_request)
+			try:
+				return Loader.open_image(image_request.path)
+			except FileNotFoundError:
+				if not image_request.has_image:
+					raise ImageFetchException('Missing default image')
 
-		if in_progress:
-			with condition:
-				condition.wait()
-		else:
-			cls._fetch_image(condition, image_request)
+			condition, in_progress = cls._fetching.get_condition(image_request)
 
-		return Loader.open_image(image_request.path)
+			if in_progress:
+				with condition:
+					condition.wait()
+			else:
+				cls._fetch_image(condition, image_request)
+
+			try:
+				return Loader.open_image(image_request.path)
+			except SyntaxError as e:
+				print(e, image_request)
+				raise e
+
+		except Exception as e:
+			print(e, image_request)
+			raise e
 
 
 class _Cropper(object):
@@ -219,22 +236,27 @@ class _Cropper(object):
 	@classmethod
 	def cropped_image(cls, image_request: ImageRequest) -> Image.Image:
 		try:
-			return Loader.open_image(image_request.path)
-		except FileNotFoundError:
-			pass
+			try:
+				return Loader.open_image(image_request.path)
+			except FileNotFoundError:
+				pass
 
-		condition, in_progress = cls._cropping.get_condition(image_request)
+			condition, in_progress = cls._cropping.get_condition(image_request)
 
-		if in_progress:
-			with condition:
-				condition.wait()
-			return Loader.open_image(image_request.path)
+			if in_progress:
+				with condition:
+					condition.wait()
+				return Loader.open_image(image_request.path)
 
-		return cls._cropped_image(
-			condition,
-			_Fetcher.get_image(image_request.cropped_as(False)),
-			image_request,
-		)
+			return cls._cropped_image(
+				condition,
+				_Fetcher.get_image(image_request.cropped_as(False)),
+				image_request,
+			)
+
+		except Exception as e:
+			print(e, image_request)
+			raise e
 
 
 class Loader(ImageLoader):
@@ -265,10 +287,11 @@ class Loader(ImageLoader):
 		pictured: picturable = None,
 		back: bool = False,
 		crop: bool = False,
+		save: bool = True,
 		image_request: ImageRequest = None,
 	) -> Promise:
 		_image_request = (
-			ImageRequest(pictured, back, crop)
+			ImageRequest(pictured, back, crop, save)
 			if image_request is None else
 			image_request
 		)
@@ -290,13 +313,12 @@ class Loader(ImageLoader):
 				)
 			)
 
-		else:
-			return Promise.resolve(
-				self._printings_executor.submit(
-					_Fetcher.get_image,
-					_image_request,
-				)
+		return Promise.resolve(
+			self._printings_executor.submit(
+				_Fetcher.get_image,
+				_image_request,
 			)
+		)
 
 	def get_default_image(self) -> Promise:
 		return Promise.resolve(
