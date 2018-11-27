@@ -1,5 +1,6 @@
 import typing as t
 
+from threading import Lock
 from abc import ABC, abstractmethod
 import os
 
@@ -160,6 +161,9 @@ class ImageRequest(object):
 
 class ImageLoader(ABC):
 
+	def __init__(self):
+		self._lock = Lock()
+
 	@abstractmethod
 	def get_image(
 		self,
@@ -174,7 +178,10 @@ class ImageLoader(ABC):
 	def get_default_image(self) -> Promise:
 		pass
 
-	@classmethod
 	@lru_cache(maxsize=128)
-	def open_image(cls, path) -> Image.Image:
+	def _open_image(self, path: str) -> Image.Image:
 		return Image.open(path)
+
+	def open_image(self, path: str) -> Image.Image:
+		with self._lock:
+			return Image.open(path)

@@ -3,6 +3,7 @@ import typing as t
 import os
 from concurrent.futures import Executor, ThreadPoolExecutor
 from threading import Lock, Event
+import functools
 
 import requests as r
 from PIL import Image
@@ -23,24 +24,6 @@ IMAGE_WIDTH, IMAGE_HEIGHT = IMAGE_SIZE
 CROPPED_IMAGE_WIDTH, CROPPED_IMAGE_HEIGHT = CROPPED_IMAGE_SIZE
 
 T = t.TypeVar('T')
-
-
-# class ConditionWithValue(Condition, t.Generic[T]):
-#
-# 	def __init__(self, parent: 'TaskAwaiter', image_request: ImageRequest):
-# 		super().__init__()
-# 		self._value = None #type: T
-# 		self._parent = parent
-# 		self._image_request = image_request
-#
-# 	@property
-# 	def value(self) -> T:
-# 		return self._value
-#
-# 	def resolve(self, value: T):
-# 		self._value = value
-# 		self._parent.resolve(self._image_request)
-# 		self.notify_all()
 
 
 class EventWithValue(Event, t.Generic[T]):
@@ -114,7 +97,7 @@ class _ImageableProcessor(object):
 	@classmethod
 	def get_image(cls, image_request: ImageRequest, loader: ImageLoader):
 		try:
-			return Loader.open_image(image_request.path)
+			return loader.open_image(image_request.path)
 		except FileNotFoundError:
 			pass
 
@@ -190,14 +173,16 @@ class _Fetcher(object):
 			else:
 				os.rename(temp_path, image_request.path)
 
-		event.set_value(fetched_image)
+		return_image = Image.open(image_request.path)
 
-		return fetched_image
+		event.set_value(return_image)
+
+		return return_image
 
 	@classmethod
-	def get_image(cls, image_request: ImageRequest) -> Image.Image:
+	def get_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
 		try:
-			return Loader.open_image(image_request.path)
+			return loader.open_image(image_request.path)
 		except FileNotFoundError:
 			if not image_request.has_image:
 				raise ImageFetchException('Missing default image')
@@ -233,9 +218,9 @@ class _Cropper(object):
 		return cropped_image
 
 	@classmethod
-	def cropped_image(cls, image_request: ImageRequest) -> Image.Image:
+	def cropped_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
 		try:
-			return Loader.open_image(image_request.path)
+			return loader.open_image(image_request.path)
 		except FileNotFoundError:
 			pass
 
@@ -247,7 +232,7 @@ class _Cropper(object):
 
 		return cls._cropped_image(
 			event,
-			_Fetcher.get_image(image_request.cropped_as(False)),
+			_Fetcher.get_image(image_request.cropped_as(False), loader),
 			image_request,
 		)
 
@@ -257,8 +242,10 @@ class Loader(ImageLoader):
 	def __init__(
 		self,
 		printing_executor: t.Union[Executor, int] = None,
-		imageable_executor: t.Union[Executor, int] = None
+		imageable_executor: t.Union[Executor, int] = None,
 	):
+		super().__init__()
+
 		self._printings_executor = (
 			printing_executor
 			if printing_executor is isinstance(printing_executor, Executor) else
@@ -303,6 +290,7 @@ class Loader(ImageLoader):
 				self._printings_executor.submit(
 					_Cropper.cropped_image,
 					_image_request,
+					self,
 				)
 			)
 
@@ -310,6 +298,7 @@ class Loader(ImageLoader):
 			self._printings_executor.submit(
 				_Fetcher.get_image,
 				_image_request,
+				self,
 			)
 		)
 
