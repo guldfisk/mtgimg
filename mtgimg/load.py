@@ -2,7 +2,7 @@ import typing as t
 
 import os
 from concurrent.futures import Executor, ThreadPoolExecutor
-from threading import Condition, Lock
+from threading import Lock, Event
 
 import requests as r
 from PIL import Image
@@ -25,37 +25,54 @@ CROPPED_IMAGE_WIDTH, CROPPED_IMAGE_HEIGHT = CROPPED_IMAGE_SIZE
 T = t.TypeVar('T')
 
 
-class ConditionWithValue(Condition, t.Generic[T]):
+# class ConditionWithValue(Condition, t.Generic[T]):
+#
+# 	def __init__(self, parent: 'TaskAwaiter', image_request: ImageRequest):
+# 		super().__init__()
+# 		self._value = None #type: T
+# 		self._parent = parent
+# 		self._image_request = image_request
+#
+# 	@property
+# 	def value(self) -> T:
+# 		return self._value
+#
+# 	def resolve(self, value: T):
+# 		self._value = value
+# 		self._parent.resolve(self._image_request)
+# 		self.notify_all()
 
-	def __init__(self):
+
+class EventWithValue(Event, t.Generic[T]):
+
+	def __init__(self) -> None:
 		super().__init__()
-		self._value = None #type: T
+		self.value = None #type: t.Optional[T]
 
-	@property
-	def value(self) -> T:
-		return self._value
+	def set_value(self, value: T) -> None:
+		self.value = value
+		super().set()
 
-	def resolve(self, value: T):
-		self._value = value
-		self.notify_all()
+	def set(self) -> None:
+		raise NotImplemented()
 
 
 class TaskAwaiter(t.Generic[T]):
 
 	def __init__(self):
 		self._lock = Lock()
-		self._map = dict() #type: t.Dict[ImageRequest, ConditionWithValue[T]]
+		self._map = dict() #type: t.Dict[ImageRequest, EventWithValue[T]]
 
-	def get_condition(self, image_request: ImageRequest) -> t.Tuple[ConditionWithValue[T], bool]:
+	def resolve(self, image_request: ImageRequest):
+		del self._map[image_request]
+
+	def get_condition(self, image_request: ImageRequest) -> t.Tuple[EventWithValue[T], bool]:
 		with self._lock:
-			previous_condition = self._map.get(image_request, None)
-
-			if previous_condition is None:
-				condition = ConditionWithValue()
-				self._map[image_request] = condition
-				return condition, False
-
-			return previous_condition, True
+			try:
+				return self._map[image_request], True
+			except KeyError:
+				self._map[image_request] = event = EventWithValue()
+				return event, False
 
 
 class ImageFetchException(Exception):
@@ -71,7 +88,7 @@ class _ImageableProcessor(object):
 		image_request: ImageRequest,
 		size: t.Tuple[int, int],
 		loader: ImageLoader,
-		condition: ConditionWithValue[Image.Image],
+		event: EventWithValue[Image.Image],
 	) -> Image.Image:
 
 		image = image_request.pictured.get_image(
@@ -90,48 +107,37 @@ class _ImageableProcessor(object):
 
 			image.save(image_request.path)
 
-		with condition:
-			condition.resolve(image)
+		event.set_value(image)
 
 		return image
 
 	@classmethod
 	def get_image(cls, image_request: ImageRequest, loader: ImageLoader):
 		try:
-			try:
-				return Loader.open_image(image_request.path)
-			except FileNotFoundError:
-				pass
-			except Exception as e:
-				print('inner joke', e, image_request)
-				raise e
+			return Loader.open_image(image_request.path)
+		except FileNotFoundError:
+			pass
 
-			condition, in_progress = cls._processing.get_condition(image_request)
+		event, in_progress = cls._processing.get_condition(image_request)
 
-			if in_progress:
-				with condition:
-					condition.wait()
+		if in_progress:
+			event.wait()
+			return event.value
 
-				return condition.value
-
-			return cls._save_imageable(
-				image_request,
-				CROPPED_IMAGE_SIZE if image_request.crop else IMAGE_SIZE,
-				loader,
-				condition,
-			)
-
-		except Exception as e:
-			print(e, image_request)
-			raise e
+		return cls._save_imageable(
+			image_request,
+			CROPPED_IMAGE_SIZE if image_request.crop else IMAGE_SIZE,
+			loader,
+			event,
+		)
 
 
 class _Fetcher(object):
-	_fetching = TaskAwaiter()
+	_fetching = TaskAwaiter() #type: TaskAwaiter[Image.Image]
 	_size = IMAGE_SIZE
 
 	@classmethod
-	def _fetch_image(cls, condition: Condition, image_request: ImageRequest):
+	def _fetch_image(cls, event: EventWithValue[Image.Image], image_request: ImageRequest):
 		try:
 			remote_card_response = r.request('GET', image_request.remote_card_uri, timeout = 30)
 		except Exception as e:
@@ -184,79 +190,66 @@ class _Fetcher(object):
 			else:
 				os.rename(temp_path, image_request.path)
 
-		with condition:
-			condition.notify_all()
+		event.set_value(fetched_image)
+
+		return fetched_image
 
 	@classmethod
 	def get_image(cls, image_request: ImageRequest) -> Image.Image:
 		try:
+			return Loader.open_image(image_request.path)
+		except FileNotFoundError:
+			if not image_request.has_image:
+				raise ImageFetchException('Missing default image')
 
-			try:
-				return Loader.open_image(image_request.path)
-			except FileNotFoundError:
-				if not image_request.has_image:
-					raise ImageFetchException('Missing default image')
+		event, in_progress = cls._fetching.get_condition(image_request)
 
-			condition, in_progress = cls._fetching.get_condition(image_request)
+		if in_progress:
+			event.wait()
+			return event.value
 
-			if in_progress:
-				with condition:
-					condition.wait()
-			else:
-				cls._fetch_image(condition, image_request)
-
-			try:
-				return Loader.open_image(image_request.path)
-			except SyntaxError as e:
-				print(e, image_request)
-				raise e
-
-		except Exception as e:
-			print(e, image_request)
-			raise e
+		return cls._fetch_image(event, image_request)
 
 
 class _Cropper(object):
 	_size = CROPPED_IMAGE_SIZE
-	_cropping = TaskAwaiter()
+	_cropping = TaskAwaiter() #type: TaskAwaiter[Image.Image]
 
 	@classmethod
-	def _cropped_image(cls, condition: Condition, image: Image.Image, image_request: ImageRequest) -> Image.Image:
+	def _cropped_image(
+		cls,
+		event: EventWithValue[Image.Image],
+		image: Image.Image,
+		image_request: ImageRequest,
+	) -> Image.Image:
 		if not os.path.exists(image_request.dir_path):
 			os.makedirs(image_request.dir_path)
 
 		cropped_image = image_crop.crop(image, image_request)
 		cropped_image.save(image_request.path, image_request.extension)
 
-		with condition:
-			condition.notify_all()
+		event.set_value(cropped_image)
 
 		return cropped_image
 
 	@classmethod
 	def cropped_image(cls, image_request: ImageRequest) -> Image.Image:
 		try:
-			try:
-				return Loader.open_image(image_request.path)
-			except FileNotFoundError:
-				pass
+			return Loader.open_image(image_request.path)
+		except FileNotFoundError:
+			pass
 
-			condition, in_progress = cls._cropping.get_condition(image_request)
+		event, in_progress = cls._cropping.get_condition(image_request)
 
-			if in_progress:
-				with condition:
-					condition.wait()
-				return Loader.open_image(image_request.path)
+		if in_progress:
+			event.wait()
+			return event.value
 
-			return cls._cropped_image(
-				condition,
-				_Fetcher.get_image(image_request.cropped_as(False)),
-				image_request,
-			)
-
-		except Exception as e:
-			print(e, image_request)
-			raise e
+		return cls._cropped_image(
+			event,
+			_Fetcher.get_image(image_request.cropped_as(False)),
+			image_request,
+		)
 
 
 class Loader(ImageLoader):
