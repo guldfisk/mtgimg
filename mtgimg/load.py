@@ -305,7 +305,7 @@ class Loader(ImageLoader):
 	def get_default_image(self) -> Promise:
 		return Promise.resolve(
 			self._printings_executor.submit(
-				lambda : Loader.open_image(paths.CARD_BACK_PATH)
+				lambda : self.open_image(paths.CARD_BACK_PATH)
 			)
 		)
 
