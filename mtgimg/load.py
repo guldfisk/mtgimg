@@ -3,16 +3,16 @@ import typing as t
 import os
 from concurrent.futures import Executor, ThreadPoolExecutor
 from threading import Lock, Event
-import functools
 
 import requests as r
 from PIL import Image
 from promise import Promise
 
 from mtgorp.models.persistent.attributes.layout import Layout
+from mtgorp.models.persistent.printing import Printing
 
 from mtgimg import paths
-from mtgimg.interface import ImageRequest, Imageable, ImageLoader, picturable
+from mtgimg.interface import ImageRequest, Imageable, ImageLoader, pictureable, ImageFetchException
 from mtgimg import crop as image_crop
 
 
@@ -58,10 +58,6 @@ class TaskAwaiter(t.Generic[T]):
 				return event, False
 
 
-class ImageFetchException(Exception):
-	pass
-
-
 class _ImageableProcessor(object):
 	_processing = TaskAwaiter() #type: TaskAwaiter[Image.Image]
 
@@ -98,7 +94,7 @@ class _ImageableProcessor(object):
 	def get_image(cls, image_request: ImageRequest, loader: ImageLoader):
 		try:
 			return loader.open_image(image_request.path)
-		except FileNotFoundError:
+		except ImageFetchException:
 			pass
 
 		event, in_progress = cls._processing.get_condition(image_request)
@@ -183,7 +179,7 @@ class _Fetcher(object):
 	def get_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
 		try:
 			return loader.open_image(image_request.path)
-		except FileNotFoundError:
+		except ImageFetchException:
 			if not image_request.has_image:
 				raise ImageFetchException('Missing default image')
 
@@ -221,7 +217,7 @@ class _Cropper(object):
 	def cropped_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
 		try:
 			return loader.open_image(image_request.path)
-		except FileNotFoundError:
+		except ImageFetchException:
 			pass
 
 		event, in_progress = cls._cropping.get_condition(image_request)
@@ -264,17 +260,31 @@ class Loader(ImageLoader):
 
 	def get_image(
 		self,
-		pictured: picturable = None,
+		pictured: pictureable = None,
+		*,
+		pictured_type: t.Union[t.Type[Printing], t.Type[Imageable]] = Printing,
+		picture_name: t.Optional[str] = None,
 		back: bool = False,
 		crop: bool = False,
 		save: bool = True,
 		image_request: ImageRequest = None,
 	) -> Promise:
 		_image_request = (
-			ImageRequest(pictured, back, crop, save)
+			ImageRequest(
+				pictured=pictured,
+				pictured_type=pictured_type,
+				picture_name=picture_name,
+				back=back,
+				crop=crop,
+			)
 			if image_request is None else
 			image_request
 		)
+
+		if _image_request.pictured_name is not None:
+			return Promise.resolve(
+				self.open_image(_image_request.path)
+			)
 
 		if isinstance(_image_request.pictured, Imageable):
 			return Promise.resolve(
