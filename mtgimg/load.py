@@ -62,7 +62,7 @@ class _ImageableProcessor(object):
 	_processing = TaskAwaiter() #type: TaskAwaiter[Image.Image]
 
 	@classmethod
-	def _save_imageable(
+	def get_imageable_image(
 		cls,
 		image_request: ImageRequest,
 		size: t.Tuple[int, int],
@@ -103,7 +103,7 @@ class _ImageableProcessor(object):
 			event.wait()
 			return event.value
 
-		return cls._save_imageable(
+		return cls.get_imageable_image(
 			image_request,
 			CROPPED_IMAGE_SIZE if image_request.crop else IMAGE_SIZE,
 			loader,
@@ -160,7 +160,7 @@ class _Fetcher(object):
 			with open(temp_path, 'rb') as f:
 				fetched_image = Image.open(f)
 
-			if not fetched_image.size == cls._size:
+			if not fetched_image.size_slug == cls._size:
 				fetched_image = fetched_image.resize(cls._size)
 				fetched_image.save(
 					image_request.path,
@@ -233,6 +233,20 @@ class _Cropper(object):
 		)
 
 
+class _ReSizer(object):
+	_size = CROPPED_IMAGE_SIZE
+	_re_sizing = TaskAwaiter() #type: TaskAwaiter[Image.Image]
+
+	@classmethod
+	def re_sized_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
+		try:
+			return loader.open_image(image_request.path)
+		except ImageFetchException:
+			pass
+
+
+
+
 class Loader(ImageLoader):
 
 	def __init__(
@@ -257,6 +271,9 @@ class Loader(ImageLoader):
 				max_workers = imageable_executor if isinstance(imageable_executor, int) else 10
 			)
 		)
+
+	def _get_image(self, image_request: ImageRequest) -> Image.Image:
+		if image_request
 
 	def get_image(
 		self,
