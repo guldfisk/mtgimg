@@ -1,11 +1,9 @@
 import typing as t
 
-import os
-import itertools
+import os, copy
 from enum import Enum
 from abc import ABC, abstractmethod
 
-import numpy as np
 from PIL import Image
 from promise import Promise
 from lazy_property import LazyProperty
@@ -15,10 +13,10 @@ from mtgorp.models.persistent.printing import Printing
 from mtgimg import paths
 
 
-class ImageSizeSlug(Enum):
+class SizeSlug(Enum):
     ORIGINAL = '', 1
-    MEDIUM = 'm', 0.7
-    THUMBNAIL = 't', 0.3
+    MEDIUM = 'm', .5
+    THUMBNAIL = 't', .15
 
     @property
     def code(self) -> str:
@@ -28,25 +26,33 @@ class ImageSizeSlug(Enum):
     def scale(self) -> float:
         return self._scale
 
+    def get_size(self, cropped: bool = False):
+        return IMAGE_SIZE_MAP[frozenset((self, cropped))]
+
     def __new__(cls, code, scale):
         obj = object.__new__(cls)
-        obj._value = code
+        obj._code = code
         obj._scale = scale
         return obj
 
 
 IMAGE_SIZE_MAP = {
-    frozenset((ImageSizeSlug.ORIGINAL, False)): (0, 0),
-    frozenset((ImageSizeSlug.ORIGINAL, True)): (0, 0),
+    frozenset((SizeSlug.ORIGINAL, False)): (745, 1040),
+    frozenset((SizeSlug.ORIGINAL, True)): (560, 435),
 }
 
 IMAGE_SIZE_MAP.update(
     {
         frozenset((size_slug, crop)):
-            np.asarray(
-                ImageSizeSlug[frozenset((ImageSizeSlug.ORIGINAL, crop))]
-            ) *
-        for size_slug in ImageSizeSlug for crop in (True, False)
+            tuple(
+                int(dimension * size_slug.scale)
+                for dimension in
+                IMAGE_SIZE_MAP[frozenset((SizeSlug.ORIGINAL, crop))]
+            )
+        for size_slug in
+        SizeSlug
+        for crop in
+        (True, False)
     }
 )
 
@@ -63,7 +69,7 @@ class Imageable(ABC):
         size: t.Tuple[int, int],
         loader: 'ImageLoader',
         back: bool = False,
-        crop: bool = False
+        crop: bool = False,
     ) -> Image.Image:
         pass
 
@@ -98,7 +104,7 @@ class ImageRequest(object):
         picture_name: t.Optional[str] = None,
         back: bool = False,
         crop: bool = False,
-        size_slug: ImageSizeSlug = ImageSizeSlug.ORIGINAL,
+        size_slug: SizeSlug = SizeSlug.ORIGINAL,
         save: bool = True,
     ):
         self._pictured = pictured
@@ -134,28 +140,41 @@ class ImageRequest(object):
             str(self._pictured.id)
         )
 
-    @property
-    def _name_additional(self):
-        return (
-                   '_b'
-                   if self._back else
-                   ''
-               ) + self._size_slug.value
+    # @property
+    # def _name_additional(self):
+    #     return (
+    #         '_crop'
+    #         if self._crop else
+    #         ''
+    #     ) + (
+    #         '_' + self._size_slug.code
+    #         if self.size_slug.code else
+    #         ''
+    #     )
 
     @property
     def _name_no_extension(self) -> str:
         return (
-            self._identifier + self._name_additional
+            self._identifier + (
+                '_b'
+                if self._back else
+                ''
+            )
             if self.has_image else
             'cardback'
+        ) + (
+            '_crop'
+            if self._crop else
+            ''
+        ) + (
+            '_' + self._size_slug.code
+            if self.size_slug.code else
+            ''
         )
 
     @property
     def name(self) -> str:
-        return (
-            self._identifier
-            + ('_crop' if self._crop else '')
-        )
+        return self._name_no_extension + '.' + self.extension
 
     @property
     def extension(self) -> str:
@@ -168,7 +187,7 @@ class ImageRequest(object):
             '_' + imageable.get_image_dir_name(),
         )
 
-    @LazyProperty
+    @property
     def dir_path(self) -> str:
         if self._pictured_name is not None:
             if issubclass(self._pictured_type, Imageable):
@@ -186,11 +205,11 @@ class ImageRequest(object):
 
         return paths.CARD_BACK_DIRECTORY_PATH
 
-    @LazyProperty
+    @property
     def path(self) -> str:
         return os.path.join(
             self.dir_path,
-            self.name + '.' + self.extension,
+            self.name,
         )
 
     @LazyProperty
@@ -210,7 +229,7 @@ class ImageRequest(object):
         return self._crop
 
     @property
-    def size_slug(self) -> ImageSizeSlug:
+    def size_slug(self) -> SizeSlug:
         return self._size_slug
 
     @property
@@ -233,8 +252,16 @@ class ImageRequest(object):
     def pictured_type(self) -> t.Union[t.Type[Printing], t.Type[Imageable]]:
         return self._pictured_type
 
-    def cropped_as(self, crop: bool) -> 'ImageRequest':
-        return self.__class__(self._pictured, back=self._back, crop=crop)
+    def spawn(self, **kwargs) -> 'ImageRequest':
+        _image_request = copy.copy(self)
+        _image_request.__dict__.update(
+            {
+                '_' + key: value
+                for key, value in
+                kwargs.items()
+            }
+        )
+        return _image_request
 
     def __hash__(self) -> int:
         return hash(
@@ -244,6 +271,8 @@ class ImageRequest(object):
                 self._pictured_name,
                 self._back,
                 self._crop,
+                self._size_slug,
+                self._save,
             )
         )
 
@@ -255,6 +284,8 @@ class ImageRequest(object):
             and self._pictured_name == other._pictured_name
             and self._back == other._back
             and self._crop == other._crop
+            and self._size_slug == other._size_slug
+            and self._save == other._save
         )
 
     def __repr__(self) -> str:
@@ -265,11 +296,13 @@ class ImageRequest(object):
                 self._pictured_name,
             )
 
-        return '{}({}, {}, {})'.format(
+        return '{}({}, {}, {}, {}, {})'.format(
             self.__class__.__name__,
             self._pictured,
             self._back,
             self._crop,
+            self._size_slug,
+            self._save,
         )
 
 
@@ -284,12 +317,14 @@ class ImageLoader(ABC):
         picture_name: t.Optional[str] = None,
         back: bool = False,
         crop: bool = False,
+        size_slug: SizeSlug = SizeSlug.ORIGINAL,
         save: bool = True,
         image_request: ImageRequest = None,
     ) -> Promise:
         pass
 
-    def get_default_image(self) -> Promise:
+    @abstractmethod
+    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL) -> Image.Image:
         pass
 
     @lru_cache(maxsize=256)

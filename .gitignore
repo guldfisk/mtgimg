@@ -1,7 +1,8 @@
 
-/mtgimg/cardback/mtg_card_back_by_draugtroll-d9taq8v.jpg
-/mtgimg/cardback/cardback_crop.png
-/mtgimg/test.py
 .idea/
 mtgimg/__pycache__/
 test.py
+/mtgimg/cardback/*
+!/mtgimg/cardback/cardback.png
+!/mtgimg/cardback/cardback_m.png
+!/mtgimg/cardback/cardback_t.png

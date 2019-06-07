@@ -43,7 +43,7 @@ def _crop_split(image: Image.Image) -> Image.Image:
 			image
 				.crop(box)
 				.rotate(-90, expand=1)
-				.resize((650, 435))
+				.resize((650, 435), Image.LANCZOS)
 			for box in
 			(
 				(96, 82, 345, 454),
@@ -62,7 +62,12 @@ def _crop_aftermath(image: Image.Image) -> Image.Image:
 		(top.width // 2, 0)
 	)
 
-	return top.resize((1149, 435)).crop((294, 0, 854, 435))
+	return top.resize(
+		(1149, 435),
+		Image.LANCZOS,
+	).crop(
+		(294, 0, 854, 435)
+	)
 
 
 def _crop_sage(image: Image.Image) -> Image.Image:
@@ -70,7 +75,10 @@ def _crop_sage(image: Image.Image) -> Image.Image:
 		image
 			.crop((373, 115, 686, 872))
 			.rotate(-90, expand=True)
-			.resize((1052, 435))
+			.resize(
+				(1052, 435),
+				Image.LANCZOS,
+			)
 			.crop((246, 0, 806, 435))
 	)
 
