@@ -140,18 +140,6 @@ class ImageRequest(object):
             str(self._pictured.id)
         )
 
-    # @property
-    # def _name_additional(self):
-    #     return (
-    #         '_crop'
-    #         if self._crop else
-    #         ''
-    #     ) + (
-    #         '_' + self._size_slug.code
-    #         if self.size_slug.code else
-    #         ''
-    #     )
-
     @property
     def _name_no_extension(self) -> str:
         return (

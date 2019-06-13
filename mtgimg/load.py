@@ -243,6 +243,9 @@ class ImageTransformer(PrintingSource):
         event.set_value(processed_image)
         return processed_image
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self._source})'
+
 
 class Cropper(ImageTransformer):
     _tasks = TaskAwaiter()
@@ -320,10 +323,10 @@ class Loader(ImageLoader):
             image_request
         )
 
-        if _image_request.pictured_name is not None:
-            return Promise.resolve(
-                self.open_image(_image_request.path)
-            )
+        # if _image_request.pictured_name is not None:
+        #     return Promise.resolve(
+        #         self.open_image(_image_request.path)
+        #     )
 
         if isinstance(_image_request.pictured, Imageable):
             return Promise.resolve(
@@ -341,6 +344,8 @@ class Loader(ImageLoader):
 
         if _image_request.size_slug != SizeSlug.ORIGINAL:
             pipeline = ReSizer(pipeline)
+
+        print(pipeline)
 
         return Promise.resolve(
             self._printings_executor.submit(
