@@ -345,8 +345,6 @@ class Loader(ImageLoader):
         if _image_request.size_slug != SizeSlug.ORIGINAL:
             pipeline = ReSizer(pipeline)
 
-        print(pipeline)
-
         return Promise.resolve(
             self._printings_executor.submit(
                 pipeline.get_image,
