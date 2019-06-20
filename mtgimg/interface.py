@@ -3,11 +3,12 @@ import typing as t
 import os, copy
 from enum import Enum
 from abc import ABC, abstractmethod
+from functools import lru_cache
 
 from PIL import Image
 from promise import Promise
 from lazy_property import LazyProperty
-from functools import lru_cache
+from frozendict import frozendict
 
 from mtgorp.models.persistent.printing import Printing
 from mtgimg import paths
@@ -55,6 +56,8 @@ IMAGE_SIZE_MAP.update(
         (True, False)
     }
 )
+
+IMAGE_SIZE_MAP = frozendict(IMAGE_SIZE_MAP)
 
 
 class ImageFetchException(Exception):
