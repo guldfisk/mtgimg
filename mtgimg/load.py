@@ -189,7 +189,9 @@ class _Fetcher(PrintingSource):
         try:
             return loader.open_image(image_request.path)
         except ImageFetchException:
-            if not image_request.has_image:
+            if image_request.pictured_name:
+                raise ImageFetchException('No local image with that name')
+            elif not image_request.has_image:
                 raise ImageFetchException('Missing default image')
 
         event, in_progress = cls._fetching.get_condition(image_request)
