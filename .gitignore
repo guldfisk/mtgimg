@@ -5,4 +5,5 @@ test.py
 /mtgimg/cardback/*
 !/mtgimg/cardback/cardback.png
 !/mtgimg/cardback/cardback_m.png
+!/mtgimg/cardback/cardback_s.png
 !/mtgimg/cardback/cardback_t.png

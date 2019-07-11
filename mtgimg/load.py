@@ -260,12 +260,20 @@ class Cropper(ImageTransformer):
 class ReSizer(ImageTransformer):
     _tasks = TaskAwaiter()
 
-    def _process_image(self, image: Image.Image, image_request: ImageRequest) -> Image.Image:
+    @classmethod
+    def resize_image(cls, image: Image.Image, size_slug: SizeSlug, crop: bool = False) -> Image.Image:
         return image.resize(
-            image_request.size_slug.get_size(
-                image_request.crop
+            size_slug.get_size(
+                crop
             ),
             Image.LANCZOS,
+        )
+
+    def _process_image(self, image: Image.Image, image_request: ImageRequest) -> Image.Image:
+        return self.resize_image(
+            image = image,
+            size_slug = image_request.size_slug,
+            crop = image_request.crop
         )
 
     def _spawn_image_request(self, image_request: ImageRequest) -> ImageRequest:
@@ -323,11 +331,6 @@ class Loader(ImageLoader):
             image_request
         )
 
-        # if _image_request.pictured_name is not None:
-        #     return Promise.resolve(
-        #         self.open_image(_image_request.path)
-        #     )
-
         if isinstance(_image_request.pictured, Imageable):
             return Promise.resolve(
                 self._imageables_executor.submit(
@@ -356,9 +359,23 @@ class Loader(ImageLoader):
     _size_cardback_path_map = {
         SizeSlug.ORIGINAL: paths.CARD_BACK_PATH,
         SizeSlug.MEDIUM: paths.MEDIUM_CARD_BACK_PATH,
+        SizeSlug.SMALL: paths.SMALL_CARD_BACK_PATH,
         SizeSlug.THUMBNAIL: paths.THUMBNAIL_CARD_BACK_PATH,
     }
     def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL) -> Image.Image:
-        return self.open_image(
-            self._size_cardback_path_map[size_slug]
-        )
+        try:
+            return self.open_image(
+                self._size_cardback_path_map[size_slug]
+            )
+        except ImageFetchException:
+            resized_back = ReSizer.resize_image(
+                self.open_image(
+                    self._size_cardback_path_map[SizeSlug.ORIGINAL]
+                ),
+                size_slug,
+                False,
+            )
+            with open(self._size_cardback_path_map[size_slug], 'wb') as f:
+                resized_back.save(f)
+            
+            return resized_back

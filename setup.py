@@ -26,5 +26,6 @@ setup(
         'pillow',
         'requests',
         'promise',
+        'frozendict',
     ],
 )

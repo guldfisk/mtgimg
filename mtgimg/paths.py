@@ -22,6 +22,11 @@ MEDIUM_CARD_BACK_PATH = os.path.join(
 	'cardback_m.png',
 )
 
+SMALL_CARD_BACK_PATH = os.path.join(
+	CARD_BACK_DIRECTORY_PATH,
+	'cardback_s.png',
+)
+
 THUMBNAIL_CARD_BACK_PATH = os.path.join(
 	CARD_BACK_DIRECTORY_PATH,
 	'cardback_t.png',

@@ -17,6 +17,7 @@ from mtgimg import paths
 class SizeSlug(Enum):
     ORIGINAL = '', 1
     MEDIUM = 'm', .5
+    SMALL = 's', .3
     THUMBNAIL = 't', .15
 
     @property
