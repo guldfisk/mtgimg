@@ -23,6 +23,7 @@ from mtgimg.interface import (
 )
 from mtgimg import crop as image_crop
 
+
 T = t.TypeVar('T')
 
 
@@ -30,9 +31,9 @@ class EventWithValue(Event, t.Generic[T]):
 
     def __init__(self) -> None:
         super().__init__()
-        self.value = None  # type: t.Optional[T]
+        self.value = None  # type: t.Union[None, T, Exception]
 
-    def set_value(self, value: T) -> None:
+    def set_value(self, value: t.Union[T, Exception]) -> None:
         self.value = value
         super().set()
 
@@ -45,9 +46,6 @@ class TaskAwaiter(t.Generic[T]):
     def __init__(self):
         self._lock = Lock()
         self._map = dict()  # type: t.Dict[ImageRequest, EventWithValue[T]]
-
-    def resolve(self, image_request: ImageRequest):
-        del self._map[image_request]
 
     def get_condition(self, image_request: ImageRequest) -> t.Tuple[EventWithValue[T], bool]:
         with self._lock:
@@ -227,13 +225,21 @@ class ImageTransformer(PrintingSource):
 
         if in_progress:
             event.wait()
+            if isinstance(event.value, Exception):
+                raise event.value
             return event.value
 
-        processed_image = self._process_image(
-            self._source.get_image(
+        try:
+            source_image = self._source.get_image(
                 self._spawn_image_request(image_request),
                 loader,
-            ),
+            )
+        except Exception as e:
+            event.set_value(e)
+            raise e
+
+        processed_image = self._process_image(
+            source_image,
             image_request,
         )
 
