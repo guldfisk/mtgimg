@@ -370,6 +370,7 @@ class Loader(ImageLoader):
         SizeSlug.SMALL: paths.SMALL_CARD_BACK_PATH,
         SizeSlug.THUMBNAIL: paths.THUMBNAIL_CARD_BACK_PATH,
     }
+
     def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL) -> Image.Image:
         try:
             return self.open_image(
