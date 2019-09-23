@@ -23,7 +23,6 @@ from mtgimg.interface import (
 )
 from mtgimg import crop as image_crop
 
-
 T = t.TypeVar('T')
 
 
@@ -67,7 +66,6 @@ class _ImageableProcessor(object):
         loader: ImageLoader,
         event: EventWithValue[Image.Image],
     ) -> Image.Image:
-
         image = image_request.pictured.get_image(
             size,
             loader,
@@ -125,7 +123,7 @@ class _Fetcher(PrintingSource):
     @classmethod
     def _fetch_image(cls, event: EventWithValue[Image.Image], image_request: ImageRequest):
         try:
-            remote_card_response = r.request('GET', image_request.remote_card_uri, timeout=30)
+            remote_card_response = r.request('GET', image_request.remote_card_uri, timeout = 30)
         except Exception as e:
             raise ImageFetchException(e)
 
@@ -138,15 +136,15 @@ class _Fetcher(PrintingSource):
             if image_request.pictured.cardboard.layout == Layout.MELD and image_request.back:
                 for part in remote_card['all_parts']:
                     if part['name'] == image_request.pictured.cardboard.back_card.name:
-                        remote_card = r.request('GET', part['uri'], timeout=30).json()
+                        remote_card = r.request('GET', part['uri'], timeout = 30).json()
 
             image_response = r.request(
                 'GET',
                 remote_card['card_faces'][-1 if image_request.back else 0]['image_uris']['png']
                 if image_request.pictured.cardboard.layout == Layout.TRANSFORM else
                 remote_card['image_uris']['png'],
-                stream=True,
-                timeout=30,
+                stream = True,
+                timeout = 30,
             )
 
         except Exception as e:
@@ -262,7 +260,7 @@ class Cropper(ImageTransformer):
         return image_crop.crop(image, image_request)
 
     def _spawn_image_request(self, image_request: ImageRequest) -> ImageRequest:
-        return image_request.spawn(crop=False)
+        return image_request.spawn(crop = False)
 
 
 class ReSizer(ImageTransformer):
@@ -285,7 +283,7 @@ class ReSizer(ImageTransformer):
         )
 
     def _spawn_image_request(self, image_request: ImageRequest) -> ImageRequest:
-        return image_request.spawn(size_slug=SizeSlug.ORIGINAL)
+        return image_request.spawn(size_slug = SizeSlug.ORIGINAL)
 
 
 class Loader(ImageLoader):
@@ -301,7 +299,7 @@ class Loader(ImageLoader):
             printing_executor
             if printing_executor is isinstance(printing_executor, Executor) else
             ThreadPoolExecutor(
-                max_workers=printing_executor if isinstance(printing_executor, int) else 10
+                max_workers = printing_executor if isinstance(printing_executor, int) else 10
             )
         )
 
@@ -309,7 +307,7 @@ class Loader(ImageLoader):
             imageable_executor
             if imageable_executor is isinstance(imageable_executor, Executor) else
             ThreadPoolExecutor(
-                max_workers=imageable_executor if isinstance(imageable_executor, int) else 10
+                max_workers = imageable_executor if isinstance(imageable_executor, int) else 10
             )
         )
 
@@ -327,13 +325,13 @@ class Loader(ImageLoader):
     ) -> Promise:
         _image_request = (
             ImageRequest(
-                pictured=pictured,
-                pictured_type=pictured_type,
-                picture_name=picture_name,
-                back=back,
-                crop=crop,
-                size_slug=size_slug,
-                save=save,
+                pictured = pictured,
+                pictured_type = pictured_type,
+                picture_name = picture_name,
+                back = back,
+                crop = crop,
+                size_slug = size_slug,
+                save = save,
             )
             if image_request is None else
             image_request
@@ -386,5 +384,5 @@ class Loader(ImageLoader):
             )
             with open(self._size_cardback_path_map[size_slug], 'wb') as f:
                 resized_back.save(f)
-            
+
             return resized_back
