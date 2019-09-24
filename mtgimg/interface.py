@@ -110,6 +110,7 @@ class ImageRequest(object):
         crop: bool = False,
         size_slug: SizeSlug = SizeSlug.ORIGINAL,
         save: bool = True,
+        cache_only: bool = False,
     ):
         self._pictured = pictured
         self._pictured_type = pictured_type
@@ -118,6 +119,7 @@ class ImageRequest(object):
         self._crop = crop
         self._size_slug = size_slug
         self._save = save
+        self._cache_only = cache_only
 
     @property
     def has_image(self) -> bool:
@@ -237,6 +239,10 @@ class ImageRequest(object):
         return self._save
 
     @property
+    def cache_only(self) -> bool:
+        return self._cache_only
+
+    @property
     def pictured_name(self) -> t.Optional[str]:
         return self._pictured_name
 
@@ -265,6 +271,7 @@ class ImageRequest(object):
                 self._crop,
                 self._size_slug,
                 self._save,
+                self._cache_only,
             )
         )
 
@@ -278,6 +285,7 @@ class ImageRequest(object):
             and self._crop == other._crop
             and self._size_slug == other._size_slug
             and self._save == other._save
+            and self._cache_only == other._cache_only
         )
 
     def __repr__(self) -> str:
@@ -288,13 +296,14 @@ class ImageRequest(object):
                 self._pictured_name,
             )
 
-        return '{}({}, {}, {}, {}, {})'.format(
+        return '{}({}, {}, {}, {}, {}, {})'.format(
             self.__class__.__name__,
             self._pictured,
             self._back,
             self._crop,
             self._size_slug,
             self._save,
+            self._cache_only,
         )
 
 
@@ -311,6 +320,7 @@ class ImageLoader(ABC):
         crop: bool = False,
         size_slug: SizeSlug = SizeSlug.ORIGINAL,
         save: bool = True,
+        cache_only: bool = False,
         image_request: ImageRequest = None,
     ) -> Promise:
         pass

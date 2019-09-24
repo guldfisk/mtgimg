@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as t
 
 import os
@@ -23,17 +25,21 @@ from mtgimg.interface import (
 )
 from mtgimg import crop as image_crop
 
+
 T = t.TypeVar('T')
 
 
 class EventWithValue(Event, t.Generic[T]):
 
-    def __init__(self) -> None:
+    def __init__(self, task_awaiter: TaskAwaiter, key: ImageRequest) -> None:
         super().__init__()
-        self.value = None  # type: t.Union[None, T, Exception]
+        self._task_awaiter = task_awaiter
+        self._key = key
+        self.value: t.Union[None, T, Exception] = None
 
     def set_value(self, value: t.Union[T, Exception]) -> None:
         self.value = value
+        self._task_awaiter.del_key(self._key)
         super().set()
 
     def set(self) -> None:
@@ -44,14 +50,18 @@ class TaskAwaiter(t.Generic[T]):
 
     def __init__(self):
         self._lock = Lock()
-        self._map = dict()  # type: t.Dict[ImageRequest, EventWithValue[T]]
+        self._map: t.Dict[ImageRequest, EventWithValue[T]] = {}
+
+    def del_key(self, image_request: ImageRequest) -> None:
+        with self._lock:
+            del self._map[image_request]
 
     def get_condition(self, image_request: ImageRequest) -> t.Tuple[EventWithValue[T], bool]:
         with self._lock:
             try:
                 return self._map[image_request], True
             except KeyError:
-                self._map[image_request] = event = EventWithValue()
+                self._map[image_request] = event = EventWithValue(self, image_request)
                 return event, False
 
 
@@ -65,7 +75,7 @@ class _ImageableProcessor(object):
         size: t.Tuple[int, int],
         loader: ImageLoader,
         event: EventWithValue[Image.Image],
-    ) -> Image.Image:
+    ) -> t.Optional[Image.Image]:
         image = image_request.pictured.get_image(
             size,
             loader,
@@ -82,16 +92,22 @@ class _ImageableProcessor(object):
 
             image.save(image_request.path)
 
+        if image_request.cache_only:
+            event.set_value(None)
+            return
         event.set_value(image)
-
         return image
 
     @classmethod
     def get_image(cls, image_request: ImageRequest, loader: ImageLoader):
-        try:
-            return loader.open_image(image_request.path)
-        except ImageFetchException:
-            pass
+        if image_request.cache_only:
+            if os.path.exists(image_request.path):
+                return
+        else:
+            try:
+                return loader.open_image(image_request.path)
+            except ImageFetchException:
+                pass
 
         event, in_progress = cls._processing.get_condition(image_request)
 
@@ -321,6 +337,7 @@ class Loader(ImageLoader):
         crop: bool = False,
         size_slug: SizeSlug = SizeSlug.ORIGINAL,
         save: bool = True,
+        cache_only: bool = False,
         image_request: ImageRequest = None,
     ) -> Promise:
         _image_request = (
@@ -332,6 +349,7 @@ class Loader(ImageLoader):
                 crop = crop,
                 size_slug = size_slug,
                 save = save,
+                cache_only = cache_only,
             )
             if image_request is None else
             image_request
