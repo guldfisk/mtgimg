@@ -66,7 +66,7 @@ class TaskAwaiter(t.Generic[T]):
 
 
 class _ImageableProcessor(object):
-    _processing = TaskAwaiter()  # type: TaskAwaiter[Image.Image]
+    _processing: TaskAwaiter[Image.Image] = TaskAwaiter()
 
     @classmethod
     def get_imageable_image(
@@ -95,6 +95,7 @@ class _ImageableProcessor(object):
         if image_request.cache_only:
             event.set_value(None)
             return
+
         event.set_value(image)
         return image
 

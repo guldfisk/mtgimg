@@ -133,6 +133,7 @@ class ImageRequest(object):
 
         if isinstance(self._pictured, Imageable):
             return True
+
         return bool(self._pictured.cardboard.front_cards)
 
     @property
