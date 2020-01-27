@@ -327,7 +327,7 @@ class ImageLoader(ABC):
         save: bool = True,
         cache_only: bool = False,
         image_request: ImageRequest = None,
-    ) -> Promise:
+    ) -> Promise[Image.Image]:
         pass
 
     @abstractmethod

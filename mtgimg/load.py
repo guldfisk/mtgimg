@@ -342,7 +342,7 @@ class Loader(ImageLoader):
         save: bool = True,
         cache_only: bool = False,
         image_request: ImageRequest = None,
-    ) -> Promise:
+    ) -> Promise[Image.Image]:
         _image_request = (
             ImageRequest(
                 pictured = pictured,
