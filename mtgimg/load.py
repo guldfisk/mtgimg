@@ -134,7 +134,7 @@ class PrintingSource(ABC):
 
 
 class _Fetcher(PrintingSource):
-    _fetching = TaskAwaiter()  # type: TaskAwaiter[Image.Image]
+    _fetching: TaskAwaiter[Image.Image] = TaskAwaiter()
     _size = SizeSlug.ORIGINAL.get_size()
 
     @classmethod
@@ -217,7 +217,7 @@ class _Fetcher(PrintingSource):
 
 
 class ImageTransformer(PrintingSource):
-    _tasks = None  # type: TaskAwaiter[Image.Image]
+    _tasks: TaskAwaiter[Image.Image] = None
 
     def __init__(self, source: PrintingSource):
         self._source = source
@@ -309,8 +309,10 @@ class Loader(ImageLoader):
         self,
         printing_executor: t.Union[Executor, int] = None,
         imageable_executor: t.Union[Executor, int] = None,
+        *,
+        image_cache_size: t.Optional[int] = 64,
     ):
-        super().__init__()
+        super().__init__(image_cache_size = image_cache_size)
 
         self._printings_executor = (
             printing_executor

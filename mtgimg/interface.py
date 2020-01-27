@@ -310,6 +310,10 @@ class ImageRequest(object):
 
 class ImageLoader(ABC):
 
+    def __init__(self, *, image_cache_size: t.Optional[int] = 64):
+        if image_cache_size is not None:
+            self.open_image = lru_cache(image_cache_size)(self.open_image)
+
     @abstractmethod
     def get_image(
         self,
@@ -330,7 +334,6 @@ class ImageLoader(ABC):
     def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL) -> Image.Image:
         pass
 
-    @lru_cache(maxsize=256)
     def open_image(self, path: str) -> Image.Image:
         try:
             image = Image.open(path)
