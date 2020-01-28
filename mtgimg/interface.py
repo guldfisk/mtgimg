@@ -290,21 +290,14 @@ class ImageRequest(object):
         )
 
     def __repr__(self) -> str:
-        if self._pictured_name is not None:
-            return '{}({}, {})'.format(
-                self.__class__.__name__,
-                self._pictured_type,
-                self._pictured_name,
-            )
-
         return '{}({}, {}, {}, {}, {}, {})'.format(
             self.__class__.__name__,
-            self._pictured,
-            self._back,
-            self._crop,
-            self._size_slug,
-            self._save,
-            self._cache_only,
+            self._pictured if self._pictured else (self._pictured_type, self._pictured_name),
+            'back' if self._back else 'front',
+            'crop' if self._crop else 'full',
+            self._size_slug.name,
+            'save' if self._save else 'save',
+            'co' if self._cache_only else 'nco',
         )
 
 

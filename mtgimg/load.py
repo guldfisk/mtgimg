@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import io
 import typing as t
 
 import os
@@ -173,29 +175,24 @@ class _Fetcher(PrintingSource):
         if not os.path.exists(image_request.dir_path):
             os.makedirs(image_request.dir_path)
 
-        temp_path = os.path.join(image_request.dir_path, '_' + image_request.name + '.' + image_request.extension)
-
-        with open(temp_path, 'wb') as temp_file:
+        with io.BytesIO() as download_file:
             for chunk in image_response.iter_content(1024):
-                temp_file.write(chunk)
+                download_file.write(chunk)
 
-            with open(temp_path, 'rb') as f:
-                fetched_image = Image.open(f)
+            fetched_image = Image.open(download_file)
+            fetched_image.load()
 
-            if not fetched_image.size == cls._size:
-                fetched_image = fetched_image.resize(cls._size, Image.LANCZOS)
-                fetched_image.save(
-                    image_request.path,
-                    image_request.extension,
-                )
-            else:
-                os.rename(temp_path, image_request.path)
+        if not fetched_image.size == cls._size:
+            fetched_image = fetched_image.resize(cls._size, Image.LANCZOS)
 
-        return_image = Image.open(image_request.path)
+        fetched_image.save(
+            image_request.path,
+            image_request.extension,
+        )
 
-        event.set_value(return_image)
+        event.set_value(fetched_image)
 
-        return return_image
+        return fetched_image
 
     @classmethod
     def get_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
@@ -219,7 +216,7 @@ class _Fetcher(PrintingSource):
 class ImageTransformer(PrintingSource):
     _tasks: TaskAwaiter[Image.Image] = None
 
-    def __init__(self, source: PrintingSource):
+    def __init__(self, source: t.Union[PrintingSource, t.Type[PrintingSource]]):
         self._source = source
 
     @abstractmethod
@@ -258,12 +255,14 @@ class ImageTransformer(PrintingSource):
             image_request,
         )
 
+
         if image_request.save:
             if not os.path.exists(image_request.dir_path):
                 os.makedirs(image_request.dir_path)
             processed_image.save(image_request.path, image_request.extension)
 
         event.set_value(processed_image)
+
         return processed_image
 
     def __repr__(self) -> str:
@@ -286,9 +285,7 @@ class ReSizer(ImageTransformer):
     @classmethod
     def resize_image(cls, image: Image.Image, size_slug: SizeSlug, crop: bool = False) -> Image.Image:
         return image.resize(
-            size_slug.get_size(
-                crop
-            ),
+            size_slug.get_size(crop),
             Image.LANCZOS,
         )
 
@@ -367,7 +364,7 @@ class Loader(ImageLoader):
                 )
             )
 
-        pipeline = _Fetcher()
+        pipeline = _Fetcher
 
         if _image_request.crop:
             pipeline = Cropper(pipeline)
