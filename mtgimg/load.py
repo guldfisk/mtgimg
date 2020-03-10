@@ -387,7 +387,16 @@ class Loader(ImageLoader):
         SizeSlug.THUMBNAIL: paths.THUMBNAIL_CARD_BACK_PATH,
     }
 
-    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL) -> Image.Image:
+    _cardback_crop_map = {}
+
+    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL, crop: bool = False) -> Image.Image:
+        if crop:
+            try:
+                return self._cardback_crop_map[size_slug]
+            except KeyError:
+                cropped = image_crop.crop(self.get_default_image(size_slug, False))
+                self._cardback_crop_map[size_slug] = cropped
+                return cropped
         try:
             return self.open_image(
                 self._size_cardback_path_map[size_slug]

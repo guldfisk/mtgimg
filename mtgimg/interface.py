@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import typing as t
 
-import os, copy
+import os
+import copy
 from enum import Enum
 from abc import ABC, abstractmethod
 from functools import lru_cache
@@ -71,7 +74,7 @@ class Imageable(ABC):
     def get_image(
         self,
         size: t.Tuple[int, int],
-        loader: 'ImageLoader',
+        loader: ImageLoader,
         back: bool = False,
         crop: bool = False,
     ) -> Image.Image:
@@ -324,7 +327,7 @@ class ImageLoader(ABC):
         pass
 
     @abstractmethod
-    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL) -> Image.Image:
+    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL, crop: bool = False) -> Image.Image:
         pass
 
     def open_image(self, path: str) -> Image.Image:
