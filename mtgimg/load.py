@@ -27,7 +27,6 @@ from mtgimg.interface import (
 )
 from mtgimg import crop as image_crop
 
-
 T = t.TypeVar('T')
 
 
@@ -255,7 +254,6 @@ class ImageTransformer(PrintingSource):
             image_request,
         )
 
-
         if image_request.save:
             if not os.path.exists(image_request.dir_path):
                 os.makedirs(image_request.dir_path)
@@ -394,7 +392,17 @@ class Loader(ImageLoader):
             try:
                 return self._cardback_crop_map[size_slug]
             except KeyError:
-                cropped = image_crop.crop(self.get_default_image(size_slug, False))
+                cropped = image_crop.crop(
+                    self.open_image(
+                        self._size_cardback_path_map[SizeSlug.ORIGINAL]
+                    )
+                )
+                if size_slug != size_slug.ORIGINAL:
+                    cropped = ReSizer.resize_image(
+                        cropped,
+                        size_slug,
+                        True,
+                    )
                 self._cardback_crop_map[size_slug] = cropped
                 return cropped
         try:
