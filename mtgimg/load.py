@@ -27,6 +27,7 @@ from mtgimg.interface import (
 )
 from mtgimg import crop as image_crop
 
+
 T = t.TypeVar('T')
 
 
@@ -298,6 +299,16 @@ class ReSizer(ImageTransformer):
         return image_request.spawn(size_slug = SizeSlug.ORIGINAL)
 
 
+class CacheOnly(PrintingSource):
+
+    def __init__(self, source: t.Union[PrintingSource, t.Type[PrintingSource]]):
+        self._source = source
+
+    def get_image(self, image_request: ImageRequest, loader: ImageLoader) -> None:
+        self._source.get_image(image_request, loader)
+        return None
+
+
 class Loader(ImageLoader):
 
     def __init__(
@@ -369,6 +380,9 @@ class Loader(ImageLoader):
 
         if _image_request.size_slug != SizeSlug.ORIGINAL:
             pipeline = ReSizer(pipeline)
+
+        if _image_request.cache_only:
+            pipeline = CacheOnly(pipeline)
 
         return Promise.resolve(
             self._printings_executor.submit(
