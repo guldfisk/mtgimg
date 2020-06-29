@@ -54,6 +54,14 @@ def _crop_split(image: Image.Image) -> Image.Image:
     )
 
 
+def _crop_flip(image: Image.Image) -> Image.Image:
+    return image.crop(
+        (141, 325, 604, 685)
+    ).resize(
+        CROPPED_SIZE,
+        Image.LANCZOS,
+    )
+
 def _crop_aftermath(image: Image.Image) -> Image.Image:
     top = image.crop((92, 120, 652, 332))
     bot = image.crop((408, 590, 620, 950))
@@ -98,6 +106,9 @@ def crop(image: Image.Image, image_request: t.Optional[ImageRequest] = None) -> 
 
     if layout == Layout.SPLIT and len(image_request.pictured.cardboard.front_cards) == 2:
         return _crop_split(image)
+
+    if layout == Layout.FLIP:
+        return _crop_flip(image)
 
     if layout == Layout.AFTERMATH and len(image_request.pictured.cardboard.front_cards) == 2:
         return _crop_aftermath(image)
