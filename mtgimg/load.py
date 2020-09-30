@@ -159,7 +159,7 @@ class _Fetcher(PrintingSource):
             image_response = r.request(
                 'GET',
                 remote_card['card_faces'][-1 if image_request.back else 0]['image_uris']['png']
-                if image_request.pictured.cardboard.layout == Layout.TRANSFORM else
+                if image_request.pictured.cardboard.layout in (Layout.TRANSFORM, Layout.MODAL) else
                 remote_card['image_uris']['png'],
                 stream = True,
                 timeout = 30,
