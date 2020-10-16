@@ -66,7 +66,7 @@ class TaskAwaiter(t.Generic[T]):
                 return event, False
 
 
-class _ImageableProcessor(object):
+class ImageableProcessor(object):
     _processing: TaskAwaiter[Image.Image] = TaskAwaiter()
 
     @classmethod
@@ -366,7 +366,7 @@ class Loader(ImageLoader):
         if isinstance(_image_request.pictured, Imageable):
             return Promise.resolve(
                 self._imageables_executor.submit(
-                    _ImageableProcessor.get_image,
+                    ImageableProcessor.get_image,
                     _image_request,
                     self,
                 )
