@@ -12,7 +12,7 @@ from mtgimg.interface import ImageRequest
 CROPPED_SIZE = (560, 435)
 
 
-def _split_horizontal(width: int, height: int, images: t.Tuple[Image.Image, ...]):
+def _split_horizontal(width: int, height: int, images: t.Sequence[Image.Image]):
     offset = width // len(images)
 
     canvas = Image.new(
@@ -24,7 +24,7 @@ def _split_horizontal(width: int, height: int, images: t.Tuple[Image.Image, ...]
     for index, image in enumerate(images):
         canvas.paste(
             image.crop((0, 0, offset, height)),
-            (index*offset, 0, (index+1)*offset, height)
+            (index * offset, 0, (index + 1) * offset, height),
         )
 
     return canvas
@@ -43,7 +43,7 @@ def _crop_split(image: Image.Image) -> Image.Image:
         tuple(
             image
                 .crop(box)
-                .rotate(-90, expand=1)
+                .rotate(-90, expand = 1)
                 .resize((650, 435), Image.LANCZOS)
             for box in
             (
@@ -62,13 +62,14 @@ def _crop_flip(image: Image.Image) -> Image.Image:
         Image.LANCZOS,
     )
 
+
 def _crop_aftermath(image: Image.Image) -> Image.Image:
     top = image.crop((92, 120, 652, 332))
     bot = image.crop((408, 590, 620, 950))
 
     top.paste(
-        bot.rotate(90, expand=1),
-        (top.width // 2, 0)
+        bot.rotate(90, expand = 1),
+        (top.width // 2, 0),
     )
 
     return top.resize(
@@ -83,12 +84,11 @@ def _crop_sage(image: Image.Image) -> Image.Image:
     return (
         image
             .crop((373, 115, 686, 872))
-            .rotate(-90, expand=True)
+            .rotate(-90, expand = True)
             .resize(
             (1052, 435),
             Image.LANCZOS,
-        )
-            .crop((246, 0, 806, 435))
+        ).crop((246, 0, 806, 435))
     )
 
 
@@ -114,4 +114,3 @@ def crop(image: Image.Image, image_request: t.Optional[ImageRequest] = None) -> 
         return _crop_aftermath(image)
 
     return _crop_standard(image)
-

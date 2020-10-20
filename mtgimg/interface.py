@@ -14,6 +14,7 @@ from lazy_property import LazyProperty
 from frozendict import frozendict
 
 from mtgorp.models.persistent.printing import Printing
+
 from mtgimg import paths
 
 
@@ -116,7 +117,7 @@ class ImageRequest(object):
         cache_only: bool = False,
     ):
         self._pictured = pictured
-        self._pictured_type = pictured_type
+        self._pictured_type = pictured_type if pictured is None else type(pictured)
         self._pictured_name = picture_name if isinstance(picture_name, (str, type(None))) else str(picture_name)
         self._back = back
         self._crop = crop
@@ -153,22 +154,22 @@ class ImageRequest(object):
     @property
     def _name_no_extension(self) -> str:
         return (
-            self._identifier + (
-                '_b'
-                if self._back else
-                ''
-            )
-            if self.has_image else
-            'cardback'
-        ) + (
-            '_crop'
-            if self._crop else
-            ''
-        ) + (
-            '_' + self._size_slug.code
-            if self.size_slug.code else
-            ''
-        )
+                   self._identifier + (
+                       '_b'
+                       if self._back else
+                       ''
+                   )
+                   if self.has_image else
+                   'cardback'
+               ) + (
+                   '_crop'
+                   if self._crop else
+                   ''
+               ) + (
+                   '_' + self._size_slug.code
+                   if self.size_slug.code else
+                   ''
+               )
 
     @property
     def name(self) -> str:
@@ -254,7 +255,7 @@ class ImageRequest(object):
     def pictured_type(self) -> t.Union[t.Type[Printing], t.Type[Imageable]]:
         return self._pictured_type
 
-    def spawn(self, **kwargs) -> 'ImageRequest':
+    def spawn(self, **kwargs) -> ImageRequest:
         _image_request = copy.copy(self)
         _image_request.__dict__.update(
             {
@@ -304,13 +305,26 @@ class ImageRequest(object):
         )
 
 
+def resize_image(image: Image.Image, size_slug: SizeSlug, crop: bool = False) -> Image.Image:
+    return image.resize(
+        size_slug.get_size(crop),
+        Image.LANCZOS,
+    )
+
+
 class ImageLoader(ABC):
 
     def __init__(self, *, image_cache_size: t.Optional[int] = 64):
         if image_cache_size is not None:
-            self.open_image = lru_cache(image_cache_size)(self.open_image)
+            self._get_image = lru_cache(image_cache_size)(self._get_image)
 
     @abstractmethod
+    def _get_image(
+        self,
+        image_request: ImageRequest = None,
+    ) -> Promise[Image.Image]:
+        pass
+
     def get_image(
         self,
         pictured: pictureable = None,
@@ -324,16 +338,64 @@ class ImageLoader(ABC):
         cache_only: bool = False,
         image_request: ImageRequest = None,
     ) -> Promise[Image.Image]:
-        pass
+        return self._get_image(
+            ImageRequest(
+                pictured = pictured,
+                pictured_type = pictured_type,
+                picture_name = picture_name,
+                back = back,
+                crop = crop,
+                size_slug = size_slug,
+                save = save,
+                cache_only = cache_only,
+            )
+            if image_request is None else
+            image_request
+        )
 
-    @abstractmethod
-    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL, crop: bool = False) -> Image.Image:
-        pass
-
-    def open_image(self, path: str) -> Image.Image:
+    def load_image_from_disk(self, path: str) -> Image.Image:
         try:
             image = Image.open(path)
             image.load()
             return image
         except Exception as e:
             raise ImageFetchException(e)
+
+    _size_cardback_path_map = {
+        SizeSlug.ORIGINAL: paths.CARD_BACK_PATH,
+        SizeSlug.MEDIUM: paths.MEDIUM_CARD_BACK_PATH,
+        SizeSlug.SMALL: paths.SMALL_CARD_BACK_PATH,
+        SizeSlug.THUMBNAIL: paths.THUMBNAIL_CARD_BACK_PATH,
+    }
+
+    @lru_cache()
+    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL, crop: bool = False, image_crop = None) -> Image.Image:
+        if crop:
+            cropped = image_crop.crop(
+                self.load_image_from_disk(
+                    self._size_cardback_path_map[SizeSlug.ORIGINAL]
+                )
+            )
+            if size_slug != size_slug.ORIGINAL:
+                cropped = resize_image(
+                    cropped,
+                    size_slug,
+                    True,
+                )
+            return cropped
+        try:
+            return self.load_image_from_disk(
+                self._size_cardback_path_map[size_slug]
+            )
+        except ImageFetchException:
+            resized_back = resize_image(
+                self.load_image_from_disk(
+                    self._size_cardback_path_map[SizeSlug.ORIGINAL]
+                ),
+                size_slug,
+                False,
+            )
+            with open(self._size_cardback_path_map[size_slug], 'wb') as f:
+                resized_back.save(f)
+
+            return resized_back

@@ -13,16 +13,14 @@ from PIL import Image
 from promise import Promise
 
 from mtgorp.models.persistent.attributes.layout import Layout
-from mtgorp.models.persistent.printing import Printing
 
-from mtgimg import paths
 from mtgimg.interface import (
     ImageRequest,
     Imageable,
     ImageLoader,
-    pictureable,
     ImageFetchException,
     SizeSlug,
+    resize_image,
 )
 from mtgimg import crop as image_crop
 
@@ -107,7 +105,7 @@ class ImageableProcessor(object):
                 return
         else:
             try:
-                return loader.open_image(image_request.path)
+                return loader.load_image_from_disk(image_request.path)
             except ImageFetchException:
                 pass
 
@@ -196,7 +194,7 @@ class _Fetcher(PrintingSource):
     @classmethod
     def get_image(cls, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
         try:
-            return loader.open_image(image_request.path)
+            return loader.load_image_from_disk(image_request.path)
         except ImageFetchException:
             if image_request.pictured_name:
                 raise ImageFetchException('No local image with that name')
@@ -228,7 +226,7 @@ class ImageTransformer(PrintingSource):
 
     def get_image(self, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
         try:
-            return loader.open_image(image_request.path)
+            return loader.load_image_from_disk(image_request.path)
         except ImageFetchException:
             pass
 
@@ -280,15 +278,8 @@ class Cropper(ImageTransformer):
 class ReSizer(ImageTransformer):
     _tasks = TaskAwaiter()
 
-    @classmethod
-    def resize_image(cls, image: Image.Image, size_slug: SizeSlug, crop: bool = False) -> Image.Image:
-        return image.resize(
-            size_slug.get_size(crop),
-            Image.LANCZOS,
-        )
-
     def _process_image(self, image: Image.Image, image_request: ImageRequest) -> Image.Image:
-        return self.resize_image(
+        return resize_image(
             image = image,
             size_slug = image_request.size_slug,
             crop = image_request.crop
@@ -323,7 +314,7 @@ class Loader(ImageLoader):
             printing_executor
             if printing_executor is isinstance(printing_executor, Executor) else
             ThreadPoolExecutor(
-                max_workers = printing_executor if isinstance(printing_executor, int) else 10
+                max_workers = printing_executor if isinstance(printing_executor, int) else 8
             )
         )
 
@@ -331,106 +322,35 @@ class Loader(ImageLoader):
             imageable_executor
             if imageable_executor is isinstance(imageable_executor, Executor) else
             ThreadPoolExecutor(
-                max_workers = imageable_executor if isinstance(imageable_executor, int) else 10
+                max_workers = imageable_executor if isinstance(imageable_executor, int) else 4
             )
         )
 
-    def get_image(
-        self,
-        pictured: pictureable = None,
-        *,
-        pictured_type: t.Union[t.Type[Printing], t.Type[Imageable]] = Printing,
-        picture_name: t.Optional[str] = None,
-        back: bool = False,
-        crop: bool = False,
-        size_slug: SizeSlug = SizeSlug.ORIGINAL,
-        save: bool = True,
-        cache_only: bool = False,
-        image_request: ImageRequest = None,
-    ) -> Promise[Image.Image]:
-        _image_request = (
-            ImageRequest(
-                pictured = pictured,
-                pictured_type = pictured_type,
-                picture_name = picture_name,
-                back = back,
-                crop = crop,
-                size_slug = size_slug,
-                save = save,
-                cache_only = cache_only,
-            )
-            if image_request is None else
-            image_request
-        )
-
-        if isinstance(_image_request.pictured, Imageable):
+    def _get_image(self, image_request: ImageRequest = None) -> Promise[Image.Image]:
+        if isinstance(image_request.pictured, Imageable):
             return Promise.resolve(
                 self._imageables_executor.submit(
                     ImageableProcessor.get_image,
-                    _image_request,
+                    image_request,
                     self,
                 )
             )
 
         pipeline = _Fetcher
 
-        if _image_request.crop:
+        if image_request.crop:
             pipeline = Cropper(pipeline)
 
-        if _image_request.size_slug != SizeSlug.ORIGINAL:
+        if image_request.size_slug != SizeSlug.ORIGINAL:
             pipeline = ReSizer(pipeline)
 
-        if _image_request.cache_only:
+        if image_request.cache_only:
             pipeline = CacheOnly(pipeline)
 
         return Promise.resolve(
             self._printings_executor.submit(
                 pipeline.get_image,
-                _image_request,
+                image_request,
                 self,
             )
         )
-
-    _size_cardback_path_map = {
-        SizeSlug.ORIGINAL: paths.CARD_BACK_PATH,
-        SizeSlug.MEDIUM: paths.MEDIUM_CARD_BACK_PATH,
-        SizeSlug.SMALL: paths.SMALL_CARD_BACK_PATH,
-        SizeSlug.THUMBNAIL: paths.THUMBNAIL_CARD_BACK_PATH,
-    }
-
-    _cardback_crop_map = {}
-
-    def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL, crop: bool = False) -> Image.Image:
-        if crop:
-            try:
-                return self._cardback_crop_map[size_slug]
-            except KeyError:
-                cropped = image_crop.crop(
-                    self.open_image(
-                        self._size_cardback_path_map[SizeSlug.ORIGINAL]
-                    )
-                )
-                if size_slug != size_slug.ORIGINAL:
-                    cropped = ReSizer.resize_image(
-                        cropped,
-                        size_slug,
-                        True,
-                    )
-                self._cardback_crop_map[size_slug] = cropped
-                return cropped
-        try:
-            return self.open_image(
-                self._size_cardback_path_map[size_slug]
-            )
-        except ImageFetchException:
-            resized_back = ReSizer.resize_image(
-                self.open_image(
-                    self._size_cardback_path_map[SizeSlug.ORIGINAL]
-                ),
-                size_slug,
-                False,
-            )
-            with open(self._size_cardback_path_map[size_slug], 'wb') as f:
-                resized_back.save(f)
-
-            return resized_back
