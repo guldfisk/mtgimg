@@ -115,6 +115,7 @@ class ImageRequest(object):
         size_slug: SizeSlug = SizeSlug.ORIGINAL,
         save: bool = True,
         cache_only: bool = False,
+        allow_disk_cached: bool = True,
     ):
         self._pictured = pictured
         self._pictured_type = pictured_type if pictured is None else type(pictured)
@@ -124,6 +125,7 @@ class ImageRequest(object):
         self._size_slug = size_slug
         self._save = save
         self._cache_only = cache_only
+        self._allow_disk_cached = allow_disk_cached
 
     @property
     def has_image(self) -> bool:
@@ -248,6 +250,10 @@ class ImageRequest(object):
         return self._cache_only
 
     @property
+    def allow_disk_cached(self) -> bool:
+        return self._allow_disk_cached
+
+    @property
     def pictured_name(self) -> t.Optional[str]:
         return self._pictured_name
 
@@ -277,6 +283,7 @@ class ImageRequest(object):
                 self._size_slug,
                 self._save,
                 self._cache_only,
+                self._allow_disk_cached,
             )
         )
 
@@ -291,17 +298,29 @@ class ImageRequest(object):
             and self._size_slug == other._size_slug
             and self._save == other._save
             and self._cache_only == other._cache_only
+            and self._allow_disk_cached == other._allow_disk_cached
         )
 
+    @property
+    def flags(self) -> t.Iterator[str]:
+        if self._back:
+            yield 'back'
+        if self._crop:
+            yield 'crop'
+        if not self._save:
+            yield 'no-cache'
+        if self._cache_only:
+            yield 'cache-only'
+        if not self._allow_disk_cached:
+            yield 'skip-cache'
+
+
     def __repr__(self) -> str:
-        return '{}({}, {}, {}, {}, {}, {})'.format(
+        return '{}({}, {}, {})'.format(
             self.__class__.__name__,
             self._pictured if self._pictured else (self._pictured_type, self._pictured_name),
-            'back' if self._back else 'front',
-            'crop' if self._crop else 'full',
             self._size_slug.name,
-            'save' if self._save else 'save',
-            'co' if self._cache_only else 'nco',
+            ' '.join(self.flags)
         )
 
 
@@ -336,6 +355,7 @@ class ImageLoader(ABC):
         size_slug: SizeSlug = SizeSlug.ORIGINAL,
         save: bool = True,
         cache_only: bool = False,
+        allow_disk_cached: bool = True,
         image_request: ImageRequest = None,
     ) -> Promise[Image.Image]:
         return self._get_image(
@@ -348,6 +368,7 @@ class ImageLoader(ABC):
                 size_slug = size_slug,
                 save = save,
                 cache_only = cache_only,
+                allow_disk_cached = allow_disk_cached,
             )
             if image_request is None else
             image_request
