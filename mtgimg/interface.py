@@ -13,7 +13,7 @@ from promise import Promise
 from lazy_property import LazyProperty
 from frozendict import frozendict
 
-from mtgorp.models.persistent.printing import Printing
+from mtgorp.models.interfaces import Printing
 
 from mtgimg import paths
 
