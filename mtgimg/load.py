@@ -54,3 +54,9 @@ class Loader(ImageLoader):
                 self,
             )
         )
+
+    def stop(self) -> None:
+        self._imageables_executor.shutdown(wait = False)
+        self._printings_executor.shutdown(wait = False)
+
+    

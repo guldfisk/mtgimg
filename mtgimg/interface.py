@@ -314,7 +314,6 @@ class ImageRequest(object):
         if not self._allow_disk_cached:
             yield 'skip-cache'
 
-
     def __repr__(self) -> str:
         return '{}({}, {}, {})'.format(
             self.__class__.__name__,
@@ -420,3 +419,7 @@ class ImageLoader(ABC):
                 resized_back.save(f)
 
             return resized_back
+
+    @abstractmethod
+    def stop(self) -> None:
+        pass
