@@ -100,6 +100,8 @@ class Fetcher(ImageSource):
             fetched_image = get_scryfall_image(image_request)
 
             if image_request.save:
+                if not os.path.exists(image_request.dir_path):
+                    os.makedirs(image_request.dir_path)
                 fetched_image.save(
                     image_request.path,
                     image_request.extension,
