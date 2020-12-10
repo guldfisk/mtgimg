@@ -28,7 +28,7 @@ class Loader(ImageLoader):
 
         self._printings_executor = (
             printing_executor
-            if printing_executor is isinstance(printing_executor, Executor) else
+            if isinstance(printing_executor, Executor) else
             ThreadPoolExecutor(
                 max_workers = printing_executor if isinstance(printing_executor, int) else 8
             )
@@ -36,7 +36,7 @@ class Loader(ImageLoader):
 
         self._imageables_executor = (
             imageable_executor
-            if imageable_executor is isinstance(imageable_executor, Executor) else
+            if isinstance(imageable_executor, Executor) else
             ThreadPoolExecutor(
                 max_workers = imageable_executor if isinstance(imageable_executor, int) else 4
             )
