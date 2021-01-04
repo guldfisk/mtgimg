@@ -15,7 +15,8 @@ from mtgimg.interface import (
     ImageLoader,
     ImageFetchException,
     SizeSlug,
-    resize_image, Imageable,
+    resize_image,
+    Imageable,
 )
 from mtgimg import crop as image_crop
 

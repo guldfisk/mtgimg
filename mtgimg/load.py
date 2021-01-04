@@ -7,15 +7,15 @@ from concurrent.futures import Executor, ThreadPoolExecutor
 from PIL import Image
 from promise import Promise
 
+from mtgimg.base import BaseImageLoader
 from mtgimg.interface import (
     ImageRequest,
     Imageable,
-    ImageLoader,
 )
 from mtgimg import pipeline
 
 
-class Loader(ImageLoader):
+class Loader(BaseImageLoader):
 
     def __init__(
         self,
