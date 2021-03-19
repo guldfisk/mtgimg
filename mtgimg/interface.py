@@ -62,7 +62,7 @@ IMAGE_SIZE_MAP.update(
     }
 )
 
-IMAGE_SIZE_MAP = frozendict(IMAGE_SIZE_MAP)
+IMAGE_SIZE_MAP: t.Mapping[t.FrozenSet[t.Union[SizeSlug, bool]], t.Tuple[int, int]] = frozendict(IMAGE_SIZE_MAP)
 
 
 class ImageFetchException(Exception):
