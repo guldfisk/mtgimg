@@ -3,8 +3,8 @@ import typing as t
 from PIL import Image
 from mtgorp.models.interfaces import Printing
 
-from mtgorp.models.persistent.attributes.layout import Layout
 from mtgorp.models.persistent.attributes import typeline
+from mtgorp.models.persistent.attributes.layout import Layout
 
 from mtgimg.interface import ImageRequest
 

@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-import typing as t
-
-import os
 import copy
-from enum import Enum
+import os
+import typing as t
 from abc import ABC, abstractmethod
+from enum import Enum
 from functools import lru_cache
 
+from frozendict import frozendict
 from PIL import Image
 from promise import Promise
-from lazy_property import LazyProperty
-from frozendict import frozendict
 
 from mtgorp.models.interfaces import Printing
 
@@ -213,7 +211,7 @@ class ImageRequest(object):
             self.name,
         )
 
-    @LazyProperty
+    @property
     def remote_card_uri(self) -> str:
         return f'https://api.scryfall.com/cards/multiverse/{self.pictured.id}'
 

@@ -17,7 +17,6 @@ setup(
     include_package_data = True,
     install_requires = [
         'appdirs',
-        'lazy-property',
         'yeetlong @ https://github.com/guldfisk/yeetlong/tarball/master#egg=yeetlong-1.0',
         'orp @ https://github.com/guldfisk/orp/tarball/master#egg=orp-1.0',
         'mtgorp @ https://github.com/guldfisk/mtgorp/tarball/master#egg=mtgorp-1.0',

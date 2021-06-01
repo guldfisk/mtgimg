@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing as t
 import os
-
 from abc import ABC, abstractmethod
 
 from PIL import Image
