@@ -80,10 +80,22 @@ def _crop_aftermath(image: Image.Image) -> Image.Image:
     )
 
 
-def _crop_sage(image: Image.Image) -> Image.Image:
+def _crop_saga(image: Image.Image) -> Image.Image:
     return (
         image
             .crop((373, 115, 686, 872))
+            .rotate(-90, expand = True)
+            .resize(
+            (1052, 435),
+            Image.LANCZOS,
+        ).crop((246, 0, 806, 435))
+    )
+
+
+def _crop_class(image: Image.Image) -> Image.Image:
+    return (
+        image
+            .crop((58, 115, 371, 872))
             .rotate(-90, expand = True)
             .resize(
             (1052, 435),
@@ -98,11 +110,11 @@ def crop(image: Image.Image, image_request: t.Optional[ImageRequest] = None) -> 
 
     layout = image_request.pictured.cardboard.layout
 
-    if layout == Layout.SAGA or typeline.SAGA in image_request.pictured.cardboard.front_card.type_line:
-        return _crop_sage(image)
-
     if layout == Layout.STANDARD:
         return _crop_standard(image)
+
+    if layout == Layout.SAGA:
+        return _crop_saga(image)
 
     if layout == Layout.SPLIT and len(image_request.pictured.cardboard.front_cards) == 2:
         return _crop_split(image)
@@ -112,5 +124,8 @@ def crop(image: Image.Image, image_request: t.Optional[ImageRequest] = None) -> 
 
     if layout == Layout.AFTERMATH and len(image_request.pictured.cardboard.front_cards) == 2:
         return _crop_aftermath(image)
+
+    if layout == Layout.CLASS:
+        return _crop_class(image)
 
     return _crop_standard(image)
