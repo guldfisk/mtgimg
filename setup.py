@@ -24,6 +24,6 @@ setup(
         'pillow',
         'requests',
         'promise',
-        'frozendict',
+        'immutabledict',
     ],
 )

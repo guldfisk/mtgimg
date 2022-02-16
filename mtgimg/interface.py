@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from functools import lru_cache
 
-from frozendict import frozendict
+from immutabledict import immutabledict
 from PIL import Image
 from promise import Promise
 
@@ -60,7 +60,7 @@ IMAGE_SIZE_MAP.update(
     }
 )
 
-IMAGE_SIZE_MAP: t.Mapping[t.FrozenSet[t.Union[SizeSlug, bool]], t.Tuple[int, int]] = frozendict(IMAGE_SIZE_MAP)
+IMAGE_SIZE_MAP: t.Mapping[t.FrozenSet[t.Union[SizeSlug, bool]], t.Tuple[int, int]] = immutabledict(IMAGE_SIZE_MAP)
 
 
 class ImageFetchException(Exception):
