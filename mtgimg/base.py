@@ -6,11 +6,10 @@ from PIL import Image
 
 from mtgimg import crop as image_crop
 from mtgimg import paths
-from mtgimg.interface import ImageLoader, SizeSlug, ImageFetchException, resize_image
+from mtgimg.interface import ImageFetchException, ImageLoader, SizeSlug, resize_image
 
 
 class BaseImageLoader(ImageLoader):
-
     _size_cardback_path_map = {
         SizeSlug.ORIGINAL: paths.CARD_BACK_PATH,
         SizeSlug.MEDIUM: paths.MEDIUM_CARD_BACK_PATH,
@@ -18,14 +17,10 @@ class BaseImageLoader(ImageLoader):
         SizeSlug.THUMBNAIL: paths.THUMBNAIL_CARD_BACK_PATH,
     }
 
-    @lru_cache(maxsize = None)
+    @lru_cache(maxsize=None)
     def get_default_image(self, size_slug: SizeSlug = SizeSlug.ORIGINAL, crop: bool = False) -> Image.Image:
         if crop:
-            cropped = image_crop.crop(
-                self.load_image_from_disk(
-                    self._size_cardback_path_map[SizeSlug.ORIGINAL]
-                )
-            )
+            cropped = image_crop.crop(self.load_image_from_disk(self._size_cardback_path_map[SizeSlug.ORIGINAL]))
             if size_slug != size_slug.ORIGINAL:
                 cropped = resize_image(
                     cropped,
@@ -35,18 +30,14 @@ class BaseImageLoader(ImageLoader):
             return cropped
 
         try:
-            return self.load_image_from_disk(
-                self._size_cardback_path_map[size_slug]
-            )
+            return self.load_image_from_disk(self._size_cardback_path_map[size_slug])
         except ImageFetchException:
             resized_back = resize_image(
-                self.load_image_from_disk(
-                    self._size_cardback_path_map[SizeSlug.ORIGINAL]
-                ),
+                self.load_image_from_disk(self._size_cardback_path_map[SizeSlug.ORIGINAL]),
                 size_slug,
                 False,
             )
-            with open(self._size_cardback_path_map[size_slug], 'wb') as f:
+            with open(self._size_cardback_path_map[size_slug], "wb") as f:
                 resized_back.save(f)
 
             return resized_back

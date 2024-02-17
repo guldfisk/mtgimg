@@ -1,0 +1,40 @@
+[project]
+name = "orp"
+
+[tool.isort]
+profile = "black"
+lines_after_imports = 2
+honor_noqa = true
+
+[tool.black]
+line-length = 119
+
+[tool.poetry]
+name = "orp"
+version = "0.1.0"
+description = ""
+authors = ["None"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "~3.9"
+antlr4-python3-runtime = "~4.9"
+appdirs = "~1.4"
+immutabledict = "~3.0"
+ijson = "~3.2"
+lazy-property = "~0.0"
+more-itertools = "~10.1"
+multiset = "~3.0"
+numpy = "~1.26"
+pickledb = "0.9"
+requests = "^2.31.0"
+sqlalchemy = "~2.0"
+promise = "~2.3"
+pillow = "~9.4"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^3.6.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

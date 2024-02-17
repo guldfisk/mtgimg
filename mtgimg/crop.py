@@ -1,10 +1,8 @@
 import typing as t
 
-from PIL import Image
 from mtgorp.models.interfaces import Printing
-
-from mtgorp.models.persistent.attributes import typeline
 from mtgorp.models.persistent.attributes.layout import Layout
+from PIL import Image
 
 from mtgimg.interface import ImageRequest
 
@@ -16,7 +14,7 @@ def _split_horizontal(width: int, height: int, images: t.Sequence[Image.Image]):
     offset = width // len(images)
 
     canvas = Image.new(
-        'RGBA',
+        "RGBA",
         (width, height),
         (0, 0, 0, 0),
     )
@@ -31,9 +29,7 @@ def _split_horizontal(width: int, height: int, images: t.Sequence[Image.Image]):
 
 
 def _crop_standard(image: Image.Image) -> Image.Image:
-    return image.crop(
-        (92, 120, 652, 555)
-    )
+    return image.crop((92, 120, 652, 555))
 
 
 def _crop_split(image: Image.Image) -> Image.Image:
@@ -41,12 +37,8 @@ def _crop_split(image: Image.Image) -> Image.Image:
         CROPPED_SIZE[0],
         CROPPED_SIZE[1],
         tuple(
-            image
-                .crop(box)
-                .rotate(-90, expand = 1)
-                .resize((650, 435), Image.LANCZOS)
-            for box in
-            (
+            image.crop(box).rotate(-90, expand=1).resize((650, 435), Image.LANCZOS)
+            for box in (
                 (96, 82, 345, 454),
                 (96, 582, 345, 954),
             )
@@ -55,9 +47,7 @@ def _crop_split(image: Image.Image) -> Image.Image:
 
 
 def _crop_flip(image: Image.Image) -> Image.Image:
-    return image.crop(
-        (141, 325, 604, 685)
-    ).resize(
+    return image.crop((141, 325, 604, 685)).resize(
         CROPPED_SIZE,
         Image.LANCZOS,
     )
@@ -68,39 +58,37 @@ def _crop_aftermath(image: Image.Image) -> Image.Image:
     bot = image.crop((408, 590, 620, 950))
 
     top.paste(
-        bot.rotate(90, expand = 1),
+        bot.rotate(90, expand=1),
         (top.width // 2, 0),
     )
 
     return top.resize(
         (1149, 435),
         Image.LANCZOS,
-    ).crop(
-        (294, 0, 854, 435)
-    )
+    ).crop((294, 0, 854, 435))
 
 
 def _crop_saga(image: Image.Image) -> Image.Image:
     return (
-        image
-            .crop((373, 115, 686, 872))
-            .rotate(-90, expand = True)
-            .resize(
+        image.crop((373, 115, 686, 872))
+        .rotate(-90, expand=True)
+        .resize(
             (1052, 435),
             Image.LANCZOS,
-        ).crop((246, 0, 806, 435))
+        )
+        .crop((246, 0, 806, 435))
     )
 
 
 def _crop_class(image: Image.Image) -> Image.Image:
     return (
-        image
-            .crop((58, 115, 371, 872))
-            .rotate(-90, expand = True)
-            .resize(
+        image.crop((58, 115, 371, 872))
+        .rotate(-90, expand=True)
+        .resize(
             (1052, 435),
             Image.LANCZOS,
-        ).crop((246, 0, 806, 435))
+        )
+        .crop((246, 0, 806, 435))
     )
 
 

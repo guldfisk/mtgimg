@@ -8,19 +8,18 @@ from enum import Enum
 from functools import lru_cache
 
 from immutabledict import immutabledict
+from mtgorp.models.interfaces import Printing
 from PIL import Image
 from promise import Promise
-
-from mtgorp.models.interfaces import Printing
 
 from mtgimg import paths
 
 
 class SizeSlug(Enum):
-    ORIGINAL = '', 1
-    MEDIUM = 'm', .5
-    SMALL = 's', .3
-    THUMBNAIL = 't', .15
+    ORIGINAL = "", 1
+    MEDIUM = "m", 0.5
+    SMALL = "s", 0.3
+    THUMBNAIL = "t", 0.15
 
     @property
     def code(self) -> str:
@@ -47,16 +46,11 @@ IMAGE_SIZE_MAP = {
 
 IMAGE_SIZE_MAP.update(
     {
-        frozenset((size_slug, crop)):
-            tuple(
-                int(dimension * size_slug.scale)
-                for dimension in
-                IMAGE_SIZE_MAP[frozenset((SizeSlug.ORIGINAL, crop))]
-            )
-        for size_slug in
-        SizeSlug
-        for crop in
-        (True, False)
+        frozenset((size_slug, crop)): tuple(
+            int(dimension * size_slug.scale) for dimension in IMAGE_SIZE_MAP[frozenset((SizeSlug.ORIGINAL, crop))]
+        )
+        for size_slug in SizeSlug
+        for crop in (True, False)
     }
 )
 
@@ -68,7 +62,6 @@ class ImageFetchException(Exception):
 
 
 class Imageable(ABC):
-
     @abstractmethod
     def get_image(
         self,
@@ -101,7 +94,6 @@ pictureable = t.Union[Imageable, Printing]
 
 
 class ImageRequest(object):
-
     def __init__(
         self,
         pictured: t.Optional[pictureable] = None,
@@ -145,61 +137,41 @@ class ImageRequest(object):
         if self._pictured_name is not None:
             return self._pictured_name
 
-        return (
-            self._pictured.get_image_name()
-            if isinstance(self._pictured, Imageable) else
-            str(self._pictured.id)
-        )
+        return self._pictured.get_image_name() if isinstance(self._pictured, Imageable) else str(self._pictured.id)
 
     @property
     def _name_no_extension(self) -> str:
         return (
-                   self._identifier + (
-                       '_b'
-                       if self._back else
-                       ''
-                   )
-                   if self.has_image else
-                   'cardback'
-               ) + (
-                   '_crop'
-                   if self._crop else
-                   ''
-               ) + (
-                   '_' + self._size_slug.code
-                   if self.size_slug.code else
-                   ''
-               )
+            (self._identifier + ("_b" if self._back else "") if self.has_image else "cardback")
+            + ("_crop" if self._crop else "")
+            + ("_" + self._size_slug.code if self.size_slug.code else "")
+        )
 
     @property
     def name(self) -> str:
-        return self._name_no_extension + '.' + self.extension
+        return self._name_no_extension + "." + self.extension
 
     @property
     def extension(self) -> str:
-        return 'png'
+        return "png"
 
     @classmethod
     def _get_imageable_dir_path(cls, imageable: t.Union[Imageable, t.Type[Imageable]]) -> str:
         return os.path.join(
             paths.IMAGES_PATH,
-            '_' + imageable.get_image_dir_name(),
+            "_" + imageable.get_image_dir_name(),
         )
 
     @property
     def dir_path(self) -> str:
         if self._pictured_name is not None:
             if issubclass(self._pictured_type, Imageable):
-                return self._get_imageable_dir_path(
-                    self._pictured_type
-                )
+                return self._get_imageable_dir_path(self._pictured_type)
             return paths.IMAGES_PATH
 
         if self.has_image:
             if isinstance(self._pictured, Imageable):
-                return self._get_imageable_dir_path(
-                    self._pictured
-                )
+                return self._get_imageable_dir_path(self._pictured)
             return paths.IMAGES_PATH
 
         return paths.CARD_BACK_DIRECTORY_PATH
@@ -213,7 +185,7 @@ class ImageRequest(object):
 
     @property
     def remote_card_uri(self) -> str:
-        return f'https://api.scryfall.com/cards/multiverse/{self.pictured.id}'
+        return f"https://api.scryfall.com/cards/multiverse/{self.pictured.id}"
 
     @property
     def pictured(self) -> pictureable:
@@ -233,11 +205,7 @@ class ImageRequest(object):
 
     @property
     def size(self) -> t.Tuple[int, int]:
-        return IMAGE_SIZE_MAP[
-            frozenset(
-                (self._size_slug, self._crop)
-            )
-        ]
+        return IMAGE_SIZE_MAP[frozenset((self._size_slug, self._crop))]
 
     @property
     def save(self) -> bool:
@@ -261,13 +229,7 @@ class ImageRequest(object):
 
     def spawn(self, **kwargs) -> ImageRequest:
         _image_request = copy.copy(self)
-        _image_request.__dict__.update(
-            {
-                '_' + key: value
-                for key, value in
-                kwargs.items()
-            }
-        )
+        _image_request.__dict__.update({"_" + key: value for key, value in kwargs.items()})
         return _image_request
 
     def __hash__(self) -> int:
@@ -302,22 +264,22 @@ class ImageRequest(object):
     @property
     def flags(self) -> t.Iterator[str]:
         if self._back:
-            yield 'back'
+            yield "back"
         if self._crop:
-            yield 'crop'
+            yield "crop"
         if not self._save:
-            yield 'no-cache'
+            yield "no-cache"
         if self._cache_only:
-            yield 'cache-only'
+            yield "cache-only"
         if not self._allow_disk_cached:
-            yield 'skip-cache'
+            yield "skip-cache"
 
     def __repr__(self) -> str:
-        return '{}({}, {}, {})'.format(
+        return "{}({}, {}, {})".format(
             self.__class__.__name__,
             self._pictured if self._pictured else (self._pictured_type, self._pictured_name),
             self._size_slug.name,
-            ' '.join(self.flags)
+            " ".join(self.flags),
         )
 
 
@@ -329,7 +291,6 @@ def resize_image(image: Image.Image, size_slug: SizeSlug, crop: bool = False) ->
 
 
 class ImageLoader(ABC):
-
     def __init__(self, *, image_cache_size: t.Optional[int] = 64):
         if image_cache_size is not None:
             self._get_image = lru_cache(image_cache_size)(self._get_image)
@@ -357,18 +318,18 @@ class ImageLoader(ABC):
     ) -> Promise[Image.Image]:
         return self._get_image(
             ImageRequest(
-                pictured = pictured,
-                pictured_type = pictured_type,
-                picture_name = picture_name,
-                back = back,
-                crop = crop,
-                size_slug = size_slug,
-                save = save,
-                cache_only = cache_only,
-                allow_disk_cached = allow_disk_cached,
+                pictured=pictured,
+                pictured_type=pictured_type,
+                picture_name=picture_name,
+                back=back,
+                crop=crop,
+                size_slug=size_slug,
+                save=save,
+                cache_only=cache_only,
+                allow_disk_cached=allow_disk_cached,
             )
-            if image_request is None else
-            image_request
+            if image_request is None
+            else image_request
         )
 
     def load_image_from_disk(self, path: str) -> Image.Image:

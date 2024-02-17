@@ -1,27 +1,25 @@
 from __future__ import annotations
 
-import typing as t
 import os
+import typing as t
 from abc import ABC, abstractmethod
 
 from PIL import Image
+from yeetlong.taskawaiter import EventWithValue, TaskAwaiter
 
-from yeetlong.taskawaiter import TaskAwaiter, EventWithValue
-
+from mtgimg import crop as image_crop
 from mtgimg.fetch import get_scryfall_image
 from mtgimg.interface import (
-    ImageRequest,
-    ImageLoader,
+    Imageable,
     ImageFetchException,
+    ImageLoader,
+    ImageRequest,
     SizeSlug,
     resize_image,
-    Imageable,
 )
-from mtgimg import crop as image_crop
 
 
 class ImageSource(ABC):
-
     @abstractmethod
     def get_image(self, image_request: ImageRequest, loader: ImageLoader) -> Image.Image:
         pass
@@ -83,9 +81,7 @@ class ImageableProcessor(ImageSource):
 
         return cls.get_imageable_image(
             image_request,
-            image_request.size_slug.get_size(
-                image_request.crop
-            ),
+            image_request.size_slug.get_size(image_request.crop),
             loader,
             event,
         )
@@ -118,9 +114,9 @@ class Fetcher(ImageSource):
                 return loader.load_image_from_disk(image_request.path)
             except ImageFetchException:
                 if image_request.pictured_name:
-                    raise ImageFetchException('No local image with that name')
+                    raise ImageFetchException("No local image with that name")
                 elif not image_request.has_image:
-                    raise ImageFetchException('Missing default image')
+                    raise ImageFetchException("Missing default image")
 
         event, in_progress = cls._fetching.get_condition(image_request)
 
@@ -179,7 +175,7 @@ class ImageTransformer(ImageSource):
             return processed_image
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}({self._source})'
+        return f"{self.__class__.__name__}({self._source})"
 
 
 class Cropper(ImageTransformer):
@@ -189,25 +185,20 @@ class Cropper(ImageTransformer):
         return image_crop.crop(image, image_request)
 
     def _spawn_image_request(self, image_request: ImageRequest) -> ImageRequest:
-        return image_request.spawn(crop = False)
+        return image_request.spawn(crop=False)
 
 
 class ReSizer(ImageTransformer):
     _tasks = TaskAwaiter()
 
     def _process_image(self, image: Image.Image, image_request: ImageRequest) -> Image.Image:
-        return resize_image(
-            image = image,
-            size_slug = image_request.size_slug,
-            crop = image_request.crop
-        )
+        return resize_image(image=image, size_slug=image_request.size_slug, crop=image_request.crop)
 
     def _spawn_image_request(self, image_request: ImageRequest) -> ImageRequest:
-        return image_request.spawn(size_slug = SizeSlug.ORIGINAL)
+        return image_request.spawn(size_slug=SizeSlug.ORIGINAL)
 
 
 class CacheOnly(ImageSource):
-
     def __init__(self, source: t.Union[ImageSource, t.Type[ImageSource]]):
         self._source = source
 
