@@ -30,7 +30,7 @@ pickledb = "0.9"
 requests = "^2.31.0"
 sqlalchemy = "~2.0"
 promise = "~2.3"
-pillow = "~9.4"
+pillow = "~10.2"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.6.1"
