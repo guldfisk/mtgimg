@@ -2,7 +2,7 @@ import typing as t
 
 from mtgorp.models.interfaces import Printing
 from mtgorp.models.persistent.attributes.layout import Layout
-from mtgorp.models.persistent.attributes.typeline import SAGA
+from mtgorp.models.persistent.attributes.typeline import BATTLE, SAGA
 from PIL import Image
 
 from mtgimg.interface import ImageRequest
@@ -68,6 +68,15 @@ def _crop_class(image: Image.Image) -> Image.Image:
     )
 
 
+def _crop_battle(image: Image.Image) -> Image.Image:
+    return (
+        image.crop((103, 115, 416, 872))
+        .rotate(-90, expand=True)
+        .resize((1052, 435), Image.LANCZOS)
+        .crop((246, 0, 806, 435))
+    )
+
+
 def crop(image: Image.Image, image_request: t.Optional[ImageRequest] = None) -> Image.Image:
     if image_request is None or not isinstance(image_request.pictured, Printing):
         return _crop_standard(image)
@@ -76,6 +85,9 @@ def crop(image: Image.Image, image_request: t.Optional[ImageRequest] = None) -> 
 
     if layout == Layout.STANDARD:
         return _crop_standard(image)
+
+    if BATTLE in image_request.pictured.cardboard.front_card.type_line and not image_request.back:
+        return _crop_battle(image)
 
     if layout == Layout.SAGA or SAGA in image_request.pictured.cardboard.front_card.type_line:
         return _crop_saga(image)
