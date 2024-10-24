@@ -2,7 +2,7 @@ import typing as t
 
 from mtgorp.models.interfaces import Printing
 from mtgorp.models.persistent.attributes.layout import Layout
-from mtgorp.models.persistent.attributes.typeline import BATTLE, SAGA
+from mtgorp.models.persistent.attributes.typeline import BATTLE, ROOM, SAGA
 from PIL import Image
 
 from mtgimg.interface import ImageRequest
@@ -59,6 +59,15 @@ def _crop_saga(image: Image.Image) -> Image.Image:
     )
 
 
+def _crop_room(image: Image.Image) -> Image.Image:
+    return (
+        image.crop((105, 60, 390, 936))
+        .rotate(-90, expand=True)
+        .resize((1052, 435), Image.LANCZOS)
+        .crop((246, 0, 806, 435))
+    )
+
+
 def _crop_class(image: Image.Image) -> Image.Image:
     return (
         image.crop((58, 115, 371, 872))
@@ -93,7 +102,9 @@ def crop(image: Image.Image, image_request: t.Optional[ImageRequest] = None) -> 
         return _crop_saga(image)
 
     if layout == Layout.SPLIT and len(image_request.pictured.cardboard.front_cards) == 2:
-        return _crop_split(image)
+        return (
+            _crop_room(image) if ROOM in image_request.pictured.cardboard.front_card.type_line else _crop_split(image)
+        )
 
     if layout == Layout.FLIP:
         return _crop_flip(image)
