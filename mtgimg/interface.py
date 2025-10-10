@@ -185,7 +185,7 @@ class ImageRequest(object):
 
     @property
     def remote_card_uri(self) -> str:
-        return f"https://api.scryfall.com/cards/multiverse/{self.pictured.id}"
+        return f"https://api.scryfall.com/cards/{self.pictured.scryfall_id}"
 
     @property
     def pictured(self) -> pictureable:
